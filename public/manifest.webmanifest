@@ -1,0 +1,11 @@
+{
+  "name": "¿A quién le toca?",
+  "short_name": "A quién le toca",
+  "description": "La ruleta de las tareas y los favores",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#090b12",
+  "theme_color": "#090b12",
+  "orientation": "portrait",
+  "icons": [{"src": "/icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any"}]
+}

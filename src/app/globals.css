@@ -1,0 +1,11 @@
+@import "tailwindcss";
+
+:root { color-scheme: dark; }
+* { box-sizing: border-box; }
+body { margin: 0; background: #090b12; color: #f4f4f5; font-family: Arial, Helvetica, sans-serif; }
+button, input { font: inherit; }
+button { cursor: pointer; }
+::selection { background: #a3e635; color: #111827; }
+.safe-bottom { padding-bottom: max(1rem, env(safe-area-inset-bottom)); }
+.glass { background: rgba(24, 27, 39, .82); border: 1px solid rgba(255,255,255,.08); backdrop-filter: blur(18px); }
+.wheel-glow { box-shadow: 0 0 70px rgba(163,230,53,.12), inset 0 0 50px rgba(163,230,53,.05); }
