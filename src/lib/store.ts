@@ -3,6 +3,7 @@ import {
   collection,
   deleteDoc,
   doc,
+  getDoc,
   onSnapshot,
   orderBy,
   query,
@@ -29,10 +30,49 @@ export async function createGroup(name: string, uid: string, memberName: string)
   await setDoc(doc(ref, "members", uid), { uid, name: memberName, joinedAt: serverTimestamp() });
   return groupId;
 }
-export async function joinGroup(groupId: string, uid: string, name: string) {
-  await setDoc(doc(database(), "groups", groupId.toUpperCase(), "members", uid),
-    { uid, name, joinedAt: serverTimestamp() }, { merge: true });
+
+export async function getGroup(groupId: string): Promise<Group | null> {
+  const normalizedId = groupId.trim().toUpperCase();
+  const snapshot = await getDoc(
+    doc(database(), "groups", normalizedId)
+  );
+
+  if (!snapshot.exists()) {
+    return null;
+  }
+
+  return {
+    id: snapshot.id,
+    ...snapshot.data()
+  } as Group;
 }
+
+export async function joinGroup(
+  groupId: string,
+  uid: string,
+  name: string
+) {
+  const normalizedId = groupId.trim().toUpperCase();
+
+  const group = await getGroup(normalizedId);
+
+  if (!group) {
+    throw new Error("No existe ningún grupo con ese código.");
+  }
+
+  await setDoc(
+    doc(database(), "groups", normalizedId, "members", uid),
+    {
+      uid,
+      name,
+      joinedAt: serverTimestamp()
+    },
+    { merge: true }
+  );
+
+  return group;
+}
+
 export function listenGroups(
   uid: string,
   callback: (groups: Group[]) => void

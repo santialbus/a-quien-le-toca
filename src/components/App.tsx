@@ -9,6 +9,7 @@ import {
   addPenalty,
   addTask,
   createGroup,
+  getGroup,
   joinGroup,
   listenDraws,
   listenGroups,
@@ -19,7 +20,8 @@ import {
   removeTask,
   saveDraw,
   updateDrawTask
-} from "@/lib/store";import { buzz, fanfare, tick } from "@/lib/audio";
+} from "@/lib/store";
+import { buzz, fanfare, tick } from "@/lib/audio";
 
 import type { Draw, Group, Member, Penalty, Task } from "@/lib/types";
 
@@ -43,7 +45,53 @@ export default function App() {
   const [fineType,setFineType] = useState<"money"|"challenge">("money");
   const [fineAmount,setFineAmount] = useState("2"); const [fineDescription,setFineDescription] = useState("Invita a un café");
   const [fineTarget,setFineTarget] = useState(""); const [notice,setNotice] = useState("");
+  const [activeGroupData, setActiveGroupData] = useState<Group | null>(null);
+  const [joinedGroups, setJoinedGroups] = useState<Group[]>([]);
+  useEffect(() => {
+    if (!uid || !firebaseConfigured) return;
 
+    const saved = window.localStorage.getItem("activeGroup");
+    if (saved) setActive(saved);
+
+    const savedJoined = JSON.parse(
+      window.localStorage.getItem("joinedGroups") || "[]"
+    ) as string[];
+
+    Promise.all(savedJoined.map(id => getGroup(id)))
+      .then(results => {
+        setJoinedGroups(results.filter((g): g is Group => g !== null));
+      });
+
+    return listenGroups(uid, setGroups);
+  }, [uid]);
+  useEffect(() => {
+    if (!active) {
+      setActiveGroupData(null);
+      return;
+    }
+
+    let cancelled = false;
+
+    getGroup(active)
+      .then(group => {
+        if (!cancelled) {
+          setActiveGroupData(group);
+        }
+      })
+      .catch(error => {
+        if (!cancelled) {
+          setNotice(
+            error instanceof Error
+              ? error.message
+              : "No se pudo recuperar el grupo."
+          );
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [active]);
   useEffect(() => {
     const firebaseAuth = auth;
 
@@ -83,7 +131,9 @@ export default function App() {
     return () => unsubs.forEach(fn => fn());
   }, [active]);
 
-  const group = groups.find(g => g.id === active);
+  const group =
+    groups.find(g => g.id === active) ??
+    (activeGroupData?.id === active ? activeGroupData : undefined);
   const taskList = tasks.length ? tasks : DEFAULT_TASKS.map((title,i)=>({id:`default-${i}`,title}));
   const sorted = useMemo(() => {
     const now = new Date();
@@ -106,10 +156,36 @@ export default function App() {
     const id = await createGroup(groupName.trim(),uid,personName.trim());
     setActive(id); setModal(null); setGroupName(""); setPersonName(""); setTab("ruleta");
   });
-  const join = () => run(async()=>{
-    if (!joinCode.trim() || !personName.trim()) throw new Error("Necesitamos el código y tu nombre.");
-    await joinGroup(joinCode.trim(),uid,personName.trim());
-    setActive(joinCode.trim().toUpperCase()); setModal(null); setJoinCode(""); setPersonName(""); setTab("ruleta");
+  const join = () => run(async () => {
+    if (!joinCode.trim() || !personName.trim()) {
+      throw new Error("Necesitamos el código y tu nombre.");
+    }
+
+    const joinedGroup = await joinGroup(
+      joinCode,
+      uid,
+      personName.trim()
+    );
+
+    setActiveGroupData(joinedGroup);
+    setJoinedGroups(previous => {
+    const updated = [
+        ...previous.filter(g => g.id !== joinedGroup.id),
+        joinedGroup
+      ];
+
+      window.localStorage.setItem(
+        "joinedGroups",
+        JSON.stringify(updated.map(g => g.id))
+      );
+
+      return updated;
+    });
+    setActive(joinedGroup.id);
+    setModal(null);
+    setJoinCode("");
+    setPersonName("");
+    setTab("ruleta");
   });
   const spin = async () => {
     if (spinning || members.length < 1 || !selectedTask || !group) return;
@@ -177,6 +253,26 @@ export default function App() {
         <div className="text-center mb-8"><div className="mx-auto w-24 h-24 rounded-[2rem] bg-lime-300/10 border border-lime-300/20 grid place-items-center mb-5"><Sparkles size={42} className="text-lime-300"/></div><h1 className="text-3xl font-black tracking-tight">Que decida <span className="text-lime-300">la suerte.</span></h1><p className="text-zinc-400 mt-3 text-sm leading-6">Reparte tareas, evita discusiones y descubre quién se escaquea más.</p></div>
         <div className="grid grid-cols-2 gap-3"><button onClick={()=>setModal("create")} className="rounded-2xl bg-lime-300 text-black p-5 text-left font-bold"><CirclePlus/><span className="block mt-4">Crear grupo</span><span className="text-xs font-normal opacity-70">Empieza desde cero</span></button><button onClick={()=>setModal("join")} className="glass rounded-2xl p-5 text-left font-bold"><Users className="text-lime-300"/><span className="block mt-4">Unirme</span><span className="text-xs text-zinc-500 font-normal">Tengo un código</span></button></div>
         {groups.length>0 && <div className="mt-8"><p className="text-xs uppercase tracking-widest text-zinc-500 mb-3">Mis grupos</p>{groups.map(g=><button key={g.id} onClick={()=>setActive(g.id)} className="glass rounded-2xl p-4 w-full flex justify-between mb-2"><span>{g.name}</span><span className="text-lime-300 text-xs">{g.id} →</span></button>)}</div>}
+        {(groups.length > 0 || joinedGroups.length > 0) && (
+          <div className="mt-8">
+            <p className="text-xs uppercase tracking-widest text-zinc-500 mb-3">
+              Mis grupos
+            </p>
+
+            {[...groups, ...joinedGroups.filter(
+              joined => !groups.some(g => g.id === joined.id)
+            )].map(g => (
+              <button
+                key={g.id}
+                onClick={() => setActive(g.id)}
+                className="glass rounded-2xl p-4 w-full flex justify-between mb-2"
+              >
+                <span>{g.name}</span>
+                <span className="text-lime-300 text-xs">{g.id} →</span>
+              </button>
+            ))}
+          </div>
+        )}
       </div> : <>
         <div className="flex items-center justify-between mb-5">
           <div><p className="text-xs text-zinc-500 uppercase tracking-widest">Sala activa</p><h1 className="text-2xl font-black mt-1">{group.name}</h1><button onClick={copyCode} className="text-xs text-lime-300 flex items-center gap-1 mt-1"><Copy size={12}/> Código {group.id}</button></div>
