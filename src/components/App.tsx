@@ -45,11 +45,23 @@ export default function App() {
   const [fineTarget,setFineTarget] = useState(""); const [notice,setNotice] = useState("");
 
   useEffect(() => {
-    if (!firebaseConfigured || !auth) return;
-    return onAuthStateChanged(auth, async user => {
-      if (user) setUid(user.uid);
-      else try { const result = await signInAnonymously(auth); setUid(result.user.uid); }
-      catch(e) { setAuthError(e instanceof Error ? e.message : "No se pudo iniciar sesión."); }
+    const firebaseAuth = auth;
+
+    if (!firebaseConfigured || !firebaseAuth) return;
+
+    return onAuthStateChanged(firebaseAuth, async user => {
+      if (user) {
+        setUid(user.uid);
+      } else {
+        try {
+          const result = await signInAnonymously(firebaseAuth);
+          setUid(result.user.uid);
+        } catch (e) {
+          setAuthError(
+            e instanceof Error ? e.message : "No se pudo iniciar sesión."
+          );
+        }
+      }
     });
   }, []);
   useEffect(() => {
