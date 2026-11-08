@@ -123,12 +123,6 @@ export default function App() {
     });
   }, []);
   useEffect(() => {
-    if (!uid || !firebaseConfigured) return;
-    const saved = window.localStorage.getItem("activeGroup");
-    if (saved) setActive(saved);
-    return listenGroups(uid, setGroups);
-  }, [uid]);
-  useEffect(() => {
     if (active) window.localStorage.setItem("activeGroup", active);
     else window.localStorage.removeItem("activeGroup");
   }, [active]);
@@ -252,6 +246,15 @@ export default function App() {
     setModal(null); setFineTarget(""); setFineDescription("Invita a un café");
   });
   const copyCode = async () => { await navigator.clipboard.writeText(active); setNotice("Código copiado. ¡Compártelo!"); };
+  const allGroups = useMemo(() => {
+    const uniqueGroups = new Map();
+
+    [...groups, ...joinedGroups].forEach(group => {
+      uniqueGroups.set(group.id, group);
+    });
+
+    return Array.from(uniqueGroups.values());
+  }, [groups, joinedGroups]);
   const addDefaultTasks = () =>
     run(async () => {
       await addDefaultTasksToGroup(active, DEFAULT_TASKS);
@@ -281,16 +284,14 @@ export default function App() {
       {!group ? <div className="pt-10">
         <div className="text-center mb-8"><div className="mx-auto w-24 h-24 rounded-[2rem] bg-lime-300/10 border border-lime-300/20 grid place-items-center mb-5"><Sparkles size={42} className="text-lime-300" /></div><h1 className="text-3xl font-black tracking-tight">Que decida <span className="text-lime-300">la suerte.</span></h1><p className="text-zinc-400 mt-3 text-sm leading-6">Reparte tareas, evita discusiones y descubre quién se escaquea más.</p></div>
         <div className="grid grid-cols-2 gap-3"><button onClick={() => setModal("create")} className="rounded-2xl bg-lime-300 text-black p-5 text-left font-bold"><CirclePlus /><span className="block mt-4">Crear grupo</span><span className="text-xs font-normal opacity-70">Empieza desde cero</span></button><button onClick={() => setModal("join")} className="glass rounded-2xl p-5 text-left font-bold"><Users className="text-lime-300" /><span className="block mt-4">Unirme</span><span className="text-xs text-zinc-500 font-normal">Tengo un código</span></button></div>
-        {groups.length > 0 && <div className="mt-8"><p className="text-xs uppercase tracking-widest text-zinc-500 mb-3">Mis grupos</p>{groups.map(g => <button key={g.id} onClick={() => setActive(g.id)} className="glass rounded-2xl p-4 w-full flex justify-between mb-2"><span>{g.name}</span><span className="text-lime-300 text-xs">{g.id} →</span></button>)}</div>}
-        {(groups.length > 0 || joinedGroups.length > 0) && (
+        
+        {allGroups.length > 0 && (
           <div className="mt-8">
             <p className="text-xs uppercase tracking-widest text-zinc-500 mb-3">
               Mis grupos
             </p>
 
-            {[...groups, ...joinedGroups.filter(
-              joined => !groups.some(g => g.id === joined.id)
-            )].map(g => (
+            {allGroups.map(g => (
               <button
                 key={g.id}
                 onClick={() => setActive(g.id)}
