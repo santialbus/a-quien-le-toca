@@ -25,28 +25,36 @@ import { buzz, fanfare, tick } from "@/lib/audio";
 
 import type { Draw, Group, Member, Penalty, Task } from "@/lib/types";
 
-const DEFAULT_TASKS = ["Bajar la basura", "Fregar los platos", "Pasear al perro", "Pagar los cafés", "Hacer la compra"];
+const DEFAULT_TASKS = [
+  "Bajar la basura",
+  "Fregar los platos",
+  "Pasear al perro",
+  "Pagar los cafés",
+  "Hacer la compra",
+];
+
 type Tab = "ruleta" | "grupo" | "ranking";
 const cx = (...v: (string | false | undefined)[]) => v.filter(Boolean).join(" ");
 
 export default function App() {
-  const [uid,setUid] = useState(""); const [authError,setAuthError] = useState("");
-  const [groups,setGroups] = useState<Group[]>([]); const [active,setActive] = useState("");
-  const [members,setMembers] = useState<Member[]>([]); const [tasks,setTasks] = useState<Task[]>([]);
-  const [penalties,setPenalties] = useState<Penalty[]>([]); const [draws,setDraws] = useState<Draw[]>([]);
-  const [tab,setTab] = useState<Tab>("ruleta"); const [busy,setBusy] = useState(false);
-  const [winner,setWinner] = useState<Member|null>(null);
-  const [winnerTask,setWinnerTask] = useState("");
-  const [selectedTask,setSelectedTask] = useState(DEFAULT_TASKS[0]);
-  const [spinning,setSpinning] = useState(false); const [rotation,setRotation] = useState(0);
-  const [modal,setModal] = useState<"create"|"join"|"member"|"task"|"fine"|null>(null);
-  const [groupName,setGroupName] = useState(""); const [personName,setPersonName] = useState("");
-  const [joinCode,setJoinCode] = useState(""); const [taskName,setTaskName] = useState("");
-  const [fineType,setFineType] = useState<"money"|"challenge">("money");
-  const [fineAmount,setFineAmount] = useState("2"); const [fineDescription,setFineDescription] = useState("Invita a un café");
-  const [fineTarget,setFineTarget] = useState(""); const [notice,setNotice] = useState("");
+  const [uid, setUid] = useState(""); const [authError, setAuthError] = useState("");
+  const [groups, setGroups] = useState<Group[]>([]); const [active, setActive] = useState("");
+  const [members, setMembers] = useState<Member[]>([]); const [tasks, setTasks] = useState<Task[]>([]);
+  const [penalties, setPenalties] = useState<Penalty[]>([]); const [draws, setDraws] = useState<Draw[]>([]);
+  const [tab, setTab] = useState<Tab>("ruleta"); const [busy, setBusy] = useState(false);
+  const [winner, setWinner] = useState<Member | null>(null);
+  const [winnerTask, setWinnerTask] = useState("");
+  const [selectedTask, setSelectedTask] = useState("");
+  const [spinning, setSpinning] = useState(false); const [rotation, setRotation] = useState(0);
+  const [modal, setModal] = useState<"create" | "join" | "member" | "task" | "fine" | null>(null);
+  const [groupName, setGroupName] = useState(""); const [personName, setPersonName] = useState("");
+  const [joinCode, setJoinCode] = useState(""); const [taskName, setTaskName] = useState("");
+  const [fineType, setFineType] = useState<"money" | "challenge">("money");
+  const [fineAmount, setFineAmount] = useState("2"); const [fineDescription, setFineDescription] = useState("Invita a un café");
+  const [fineTarget, setFineTarget] = useState(""); const [notice, setNotice] = useState("");
   const [activeGroupData, setActiveGroupData] = useState<Group | null>(null);
   const [joinedGroups, setJoinedGroups] = useState<Group[]>([]);
+  const [defaultTasksAdded, setDefaultTasksAdded] = useState(false);
   useEffect(() => {
     if (!uid || !firebaseConfigured) return;
 
@@ -125,16 +133,24 @@ export default function App() {
   useEffect(() => {
     if (!active) { setMembers([]); setTasks([]); setPenalties([]); setDraws([]); return; }
     const unsubs = [
-      listenMembers(active,setMembers), listenTasks(active,setTasks),
-      listenPenalties(active,setPenalties), listenDraws(active,setDraws)
+      listenMembers(active, setMembers), listenTasks(active, setTasks),
+      listenPenalties(active, setPenalties), listenDraws(active, setDraws)
     ];
     return () => unsubs.forEach(fn => fn());
   }, [active]);
 
+  useEffect(() => {
+    if (tasks.length === 0) {
+      setSelectedTask("");
+    } else if (!tasks.some(task => task.title === selectedTask)) {
+      setSelectedTask(tasks[0].title);
+    }
+  }, [tasks, selectedTask]);
+
   const group =
     groups.find(g => g.id === active) ??
     (activeGroupData?.id === active ? activeGroupData : undefined);
-  const taskList = tasks.length ? tasks : DEFAULT_TASKS.map((title,i)=>({id:`default-${i}`,title}));
+  const taskList = tasks;
   const sorted = useMemo(() => {
     const now = new Date();
     const monthly = penalties.filter(p => {
@@ -143,17 +159,17 @@ export default function App() {
     });
     return members.map(m => ({
       ...m, count: monthly.filter(p => p.targetUid === m.uid).length,
-      euros: monthly.filter(p => p.targetUid === m.uid && p.type === "money").reduce((s,p)=>s+(p.amount||0),0)
-    })).sort((a,b)=>b.count-a.count);
-  }, [members,penalties]);
-  const run = async (fn:()=>Promise<void>) => {
+      euros: monthly.filter(p => p.targetUid === m.uid && p.type === "money").reduce((s, p) => s + (p.amount || 0), 0)
+    })).sort((a, b) => b.count - a.count);
+  }, [members, penalties]);
+  const run = async (fn: () => Promise<void>) => {
     setBusy(true); setNotice("");
-    try { await fn(); } catch(e) { setNotice(e instanceof Error ? e.message : "Ha ocurrido un error."); }
+    try { await fn(); } catch (e) { setNotice(e instanceof Error ? e.message : "Ha ocurrido un error."); }
     finally { setBusy(false); }
   };
-  const create = () => run(async()=>{
+  const create = () => run(async () => {
     if (!groupName.trim() || !personName.trim()) throw new Error("Indica el nombre del grupo y el tuyo.");
-    const id = await createGroup(groupName.trim(),uid,personName.trim());
+    const id = await createGroup(groupName.trim(), uid, personName.trim());
     setActive(id); setModal(null); setGroupName(""); setPersonName(""); setTab("ruleta");
   });
   const join = () => run(async () => {
@@ -169,7 +185,7 @@ export default function App() {
 
     setActiveGroupData(joinedGroup);
     setJoinedGroups(previous => {
-    const updated = [
+      const updated = [
         ...previous.filter(g => g.id !== joinedGroup.id),
         joinedGroup
       ];
@@ -224,35 +240,47 @@ export default function App() {
       });
     }, 3400);
   };
-  const addFine = () => run(async()=>{
-    const target = members.find(m=>m.uid===fineTarget);
+  const addFine = () => run(async () => {
+    const target = members.find(m => m.uid === fineTarget);
     if (!target) throw new Error("Selecciona a quién sancionar.");
     const amount = fineType === "money" ? Number(fineAmount) : undefined;
     if (fineType === "money" && (!amount || amount <= 0)) throw new Error("Introduce una cantidad válida.");
     if (!fineDescription.trim()) throw new Error("Describe la multa o el reto.");
-    await addPenalty(active,{targetUid:target.uid,targetName:target.name,type:fineType,amount,description:fineDescription.trim(),createdBy:uid});
+    await addPenalty(active, { targetUid: target.uid, targetName: target.name, type: fineType, amount, description: fineDescription.trim(), createdBy: uid });
     setModal(null); setFineTarget(""); setFineDescription("Invita a un café");
   });
   const copyCode = async () => { await navigator.clipboard.writeText(active); setNotice("Código copiado. ¡Compártelo!"); };
-  const addDefaultTasks = () => run(async()=>{ for (const t of DEFAULT_TASKS) await addTask(active,t); setNotice("Tareas añadidas al grupo."); });
+  const addDefaultTasks = () =>
+    run(async () => {
+      const existingTitles = new Set(tasks.map(task => task.title));
+
+      for (const task of DEFAULT_TASKS) {
+        if (!existingTitles.has(task)) {
+          await addTask(active, task);
+        }
+      }
+
+      setDefaultTasksAdded(true);
+      setNotice("Tareas predeterminadas añadidas.");
+    });
 
   if (!firebaseConfigured) return <SetupScreen />;
-  if (authError) return <main className="min-h-screen grid place-items-center p-6"><div className="glass rounded-3xl p-6 max-w-md"><AlertCircle className="text-rose-400 mb-3"/><h1 className="text-xl font-bold">No se pudo conectar</h1><p className="text-zinc-400 mt-2 text-sm">{authError}</p><p className="text-zinc-500 text-xs mt-4">Comprueba Firebase Authentication y habilita el proveedor Anónimo.</p></div></main>;
-  if (!uid) return <main className="min-h-screen grid place-items-center"><LoaderCircle className="animate-spin text-lime-300"/></main>;
+  if (authError) return <main className="min-h-screen grid place-items-center p-6"><div className="glass rounded-3xl p-6 max-w-md"><AlertCircle className="text-rose-400 mb-3" /><h1 className="text-xl font-bold">No se pudo conectar</h1><p className="text-zinc-400 mt-2 text-sm">{authError}</p><p className="text-zinc-500 text-xs mt-4">Comprueba Firebase Authentication y habilita el proveedor Anónimo.</p></div></main>;
+  if (!uid) return <main className="min-h-screen grid place-items-center"><LoaderCircle className="animate-spin text-lime-300" /></main>;
 
   return <main className="min-h-screen pb-28">
     <header className="sticky top-0 z-30 px-5 pt-5 pb-4 bg-[#090b12]/90 backdrop-blur-xl border-b border-white/5">
       <div className="max-w-xl mx-auto flex items-center justify-between">
         <div><div className="flex items-center gap-2"><span className="w-8 h-8 rounded-xl bg-lime-300 text-black grid place-items-center font-black">¿!</span><span className="font-black tracking-tight">¿A quién le toca?</span></div><p className="text-[11px] text-zinc-500 mt-1 ml-10">EL DESTINO ESTÁ ECHADO</p></div>
-        {group && <button onClick={()=>setTab("grupo")} className="glass rounded-full px-3 py-2 text-xs flex items-center gap-2 max-w-40"><span className="truncate">{group.name}</span><ChevronDown size={14}/></button>}
+        {group && <button onClick={() => setTab("grupo")} className="glass rounded-full px-3 py-2 text-xs flex items-center gap-2 max-w-40"><span className="truncate">{group.name}</span><ChevronDown size={14} /></button>}
       </div>
     </header>
 
     <div className="max-w-xl mx-auto px-5 pt-5">
       {!group ? <div className="pt-10">
-        <div className="text-center mb-8"><div className="mx-auto w-24 h-24 rounded-[2rem] bg-lime-300/10 border border-lime-300/20 grid place-items-center mb-5"><Sparkles size={42} className="text-lime-300"/></div><h1 className="text-3xl font-black tracking-tight">Que decida <span className="text-lime-300">la suerte.</span></h1><p className="text-zinc-400 mt-3 text-sm leading-6">Reparte tareas, evita discusiones y descubre quién se escaquea más.</p></div>
-        <div className="grid grid-cols-2 gap-3"><button onClick={()=>setModal("create")} className="rounded-2xl bg-lime-300 text-black p-5 text-left font-bold"><CirclePlus/><span className="block mt-4">Crear grupo</span><span className="text-xs font-normal opacity-70">Empieza desde cero</span></button><button onClick={()=>setModal("join")} className="glass rounded-2xl p-5 text-left font-bold"><Users className="text-lime-300"/><span className="block mt-4">Unirme</span><span className="text-xs text-zinc-500 font-normal">Tengo un código</span></button></div>
-        {groups.length>0 && <div className="mt-8"><p className="text-xs uppercase tracking-widest text-zinc-500 mb-3">Mis grupos</p>{groups.map(g=><button key={g.id} onClick={()=>setActive(g.id)} className="glass rounded-2xl p-4 w-full flex justify-between mb-2"><span>{g.name}</span><span className="text-lime-300 text-xs">{g.id} →</span></button>)}</div>}
+        <div className="text-center mb-8"><div className="mx-auto w-24 h-24 rounded-[2rem] bg-lime-300/10 border border-lime-300/20 grid place-items-center mb-5"><Sparkles size={42} className="text-lime-300" /></div><h1 className="text-3xl font-black tracking-tight">Que decida <span className="text-lime-300">la suerte.</span></h1><p className="text-zinc-400 mt-3 text-sm leading-6">Reparte tareas, evita discusiones y descubre quién se escaquea más.</p></div>
+        <div className="grid grid-cols-2 gap-3"><button onClick={() => setModal("create")} className="rounded-2xl bg-lime-300 text-black p-5 text-left font-bold"><CirclePlus /><span className="block mt-4">Crear grupo</span><span className="text-xs font-normal opacity-70">Empieza desde cero</span></button><button onClick={() => setModal("join")} className="glass rounded-2xl p-5 text-left font-bold"><Users className="text-lime-300" /><span className="block mt-4">Unirme</span><span className="text-xs text-zinc-500 font-normal">Tengo un código</span></button></div>
+        {groups.length > 0 && <div className="mt-8"><p className="text-xs uppercase tracking-widest text-zinc-500 mb-3">Mis grupos</p>{groups.map(g => <button key={g.id} onClick={() => setActive(g.id)} className="glass rounded-2xl p-4 w-full flex justify-between mb-2"><span>{g.name}</span><span className="text-lime-300 text-xs">{g.id} →</span></button>)}</div>}
         {(groups.length > 0 || joinedGroups.length > 0) && (
           <div className="mt-8">
             <p className="text-xs uppercase tracking-widest text-zinc-500 mb-3">
@@ -275,54 +303,68 @@ export default function App() {
         )}
       </div> : <>
         <div className="flex items-center justify-between mb-5">
-          <div><p className="text-xs text-zinc-500 uppercase tracking-widest">Sala activa</p><h1 className="text-2xl font-black mt-1">{group.name}</h1><button onClick={copyCode} className="text-xs text-lime-300 flex items-center gap-1 mt-1"><Copy size={12}/> Código {group.id}</button></div>
-          <button onClick={()=>{setActive("");setWinner(null);}} className="glass rounded-xl p-3 text-zinc-400" aria-label="Cambiar de grupo"><ArrowLeft size={18}/></button>
+          <div><p className="text-xs text-zinc-500 uppercase tracking-widest">Sala activa</p><h1 className="text-2xl font-black mt-1">{group.name}</h1><button onClick={copyCode} className="text-xs text-lime-300 flex items-center gap-1 mt-1"><Copy size={12} /> Código {group.id}</button></div>
+          <button onClick={() => { setActive(""); setWinner(null); }} className="glass rounded-xl p-3 text-zinc-400" aria-label="Cambiar de grupo"><ArrowLeft size={18} /></button>
         </div>
-        {notice && <div className="mb-4 rounded-xl bg-rose-400/10 border border-rose-400/20 p-3 text-sm text-rose-200 flex justify-between gap-2"><span>{notice}</span><button onClick={()=>setNotice("")}><X size={15}/></button></div>}
-        {tab==="ruleta" && <section>
+        {notice && <div className="mb-4 rounded-xl bg-rose-400/10 border border-rose-400/20 p-3 text-sm text-rose-200 flex justify-between gap-2"><span>{notice}</span><button onClick={() => setNotice("")}><X size={15} /></button></div>}
+        {tab === "ruleta" && <section>
           <div className="flex justify-between items-center mb-4"><span className="text-xs text-zinc-500 uppercase tracking-widest">Sorteo exprés</span><span className="text-xs text-zinc-500">{members.length} participantes</span></div>
           <div className="glass wheel-glow rounded-[2rem] p-6 relative overflow-hidden">
-            <div className="absolute top-0 left-1/2 -translate-x-1/2 -translate-y-1/2 w-44 h-44 bg-lime-300/10 blur-3xl rounded-full"/>
+            <div className="absolute top-0 left-1/2 -translate-x-1/2 -translate-y-1/2 w-44 h-44 bg-lime-300/10 blur-3xl rounded-full" />
             <div className="relative mx-auto w-64 h-64 sm:w-72 sm:h-72">
-              <div className="absolute z-10 top-0 left-1/2 -translate-x-1/2 -translate-y-1"><div className="w-0 h-0 border-l-[13px] border-r-[13px] border-t-[24px] border-l-transparent border-r-transparent border-t-lime-300 drop-shadow-lg"/></div>
-              <div className={cx("absolute inset-2 rounded-full border-[10px] border-[#292f3c] bg-[conic-gradient(from_0deg,#a3e635_0deg_60deg,#252c38_60deg_120deg,#a3e635_120deg_180deg,#252c38_180deg_240deg,#a3e635_240deg_300deg,#252c38_300deg_360deg)] transition-transform duration-[3400ms] ease-[cubic-bezier(.12,.75,.12,1)] grid place-items-center",spinning&&"brightness-125")} style={{transform:`rotate(${rotation}deg)`}}>
+              <div className="absolute z-10 top-0 left-1/2 -translate-x-1/2 -translate-y-1"><div className="w-0 h-0 border-l-[13px] border-r-[13px] border-t-[24px] border-l-transparent border-r-transparent border-t-lime-300 drop-shadow-lg" /></div>
+              <div className={cx("absolute inset-2 rounded-full border-[10px] border-[#292f3c] bg-[conic-gradient(from_0deg,#a3e635_0deg_60deg,#252c38_60deg_120deg,#a3e635_120deg_180deg,#252c38_180deg_240deg,#a3e635_240deg_300deg,#252c38_300deg_360deg)] transition-transform duration-[3400ms] ease-[cubic-bezier(.12,.75,.12,1)] grid place-items-center", spinning && "brightness-125")} style={{ transform: `rotate(${rotation}deg)` }}>
                 <div className="w-24 h-24 rounded-full bg-[#111520] border border-white/10 shadow-2xl grid place-items-center"><span className="text-3xl">🎯</span></div>
               </div>
-              <div className="absolute inset-0 rounded-full border border-white/10 pointer-events-none"/>
+              <div className="absolute inset-0 rounded-full border border-white/10 pointer-events-none" />
             </div>
             <div className="text-center mt-5">
               <p className="text-xs text-zinc-500 uppercase tracking-widest">
                 ¿QUÉ TAREA VAMOS A REPARTIR?
               </p>
 
-              <select
-                value={selectedTask}
-                onChange={e => setSelectedTask(e.target.value)}
-                disabled={spinning || busy}
-                className="w-full mt-3 bg-[#111520] border border-lime-300/30 rounded-xl p-3 text-white font-semibold outline-none focus:border-lime-300"
-              >
-                {taskList.map(task => (
-                  <option key={task.id} value={task.title}>
-                    {task.title}
-                  </option>
-                ))}
-              </select>
+              {taskList.length > 0 ? (
+                <select
+                  value={selectedTask}
+                  onChange={e => setSelectedTask(e.target.value)}
+                  disabled={spinning || busy}
+                  className="w-full mt-3 bg-[#111520] border border-lime-300/30 rounded-xl p-3 text-white font-semibold outline-none focus:border-lime-300"
+                >
+                  {taskList.map(task => (
+                    <option key={task.id} value={task.title}>
+                      {task.title}
+                    </option>
+                  ))}
+                </select>
+              ) : (
+                <div className="mt-3 rounded-xl border border-white/10 bg-white/5 p-4">
+                  <p className="text-sm text-zinc-300">
+                    Este grupo todavía no tiene tareas.
+                  </p>
+                  <button
+                    onClick={() => setTab("grupo")}
+                    className="mt-3 text-sm font-bold text-lime-300"
+                  >
+                    + Añadir tareas en Grupo
+                  </button>
+                </div>
+              )}
 
               <p className="text-xs text-zinc-500 uppercase tracking-widest mt-5">
                 {spinning ? "EL DESTINO ESTÁ DECIDIENDO…" : "¿QUIÉN SE ENCARGA?"}
               </p>
 
               <button
-                disabled={spinning || busy || members.length === 0}
+                disabled={spinning || busy || members.length === 0 || !selectedTask}
                 onClick={spin}
                 className="mt-4 w-full rounded-2xl bg-lime-300 hover:bg-lime-200 disabled:opacity-40 text-black font-black text-lg py-4 flex items-center justify-center gap-2 shadow-lg shadow-lime-300/10"
               >
-                <RotateCw size={20} className={spinning ? "animate-spin" : ""}/>
+                <RotateCw size={20} className={spinning ? "animate-spin" : ""} />
                 {spinning ? "Girando…" : "¡GIRAR LA RULETA!"}
               </button>
 
               <p className="text-[10px] text-zinc-600 mt-3 flex items-center justify-center gap-1">
-                <Volume2 size={12}/>
+                <Volume2 size={12} />
                 Activa el sonido al tocar girar · vibración si está disponible
               </p>
             </div>
@@ -362,48 +404,102 @@ export default function App() {
               </button>
             </div>
           )}
-          {members.length===0 && <p className="text-center text-sm text-zinc-500 mt-5">Añade participantes en la pestaña Grupo para empezar.</p>}
-          <div className="mt-6"><div className="flex justify-between mb-3"><h3 className="font-bold">Últimos sorteos</h3><span className="text-xs text-zinc-500">{draws.length} registros</span></div>{draws.slice(0,4).map(d=><div key={d.id} className="glass rounded-xl p-3 mb-2 flex justify-between text-sm"><span>{d.winnerName} <span className="text-zinc-500">· {d.taskTitle}</span></span><Check size={16} className="text-lime-300"/></div>)}</div>
+          {members.length === 0 && <p className="text-center text-sm text-zinc-500 mt-5">Añade participantes en la pestaña Grupo para empezar.</p>}
+          <div className="mt-6"><div className="flex justify-between mb-3"><h3 className="font-bold">Últimos sorteos</h3><span className="text-xs text-zinc-500">{draws.length} registros</span></div>{draws.slice(0, 4).map(d => <div key={d.id} className="glass rounded-xl p-3 mb-2 flex justify-between text-sm"><span>{d.winnerName} <span className="text-zinc-500">· {d.taskTitle}</span></span><Check size={16} className="text-lime-300" /></div>)}</div>
         </section>}
-        {tab==="grupo" && <section>
-          <div className="flex items-center justify-between mb-4"><h2 className="text-xl font-black">Tu grupo</h2><button onClick={()=>setModal("member")} className="bg-lime-300 text-black rounded-xl px-3 py-2 text-sm font-bold flex gap-1 items-center"><Plus size={16}/> Añadir</button></div>
-          <div className="glass rounded-2xl p-4 mb-6"><div className="flex justify-between"><div><p className="text-xs text-zinc-500">Código para invitar</p><p className="text-2xl font-black tracking-[.2em] mt-1">{group.id}</p></div><button onClick={copyCode} className="self-center bg-white/10 p-3 rounded-xl"><Copy size={17}/></button></div><p className="text-xs text-zinc-500 mt-3">Comparte el código y la otra persona podrá unirse desde su móvil.</p></div>
+        {tab === "grupo" && <section>
+          <div className="flex items-center justify-between mb-4"><h2 className="text-xl font-black">Tu grupo</h2><button onClick={() => setModal("member")} className="bg-lime-300 text-black rounded-xl px-3 py-2 text-sm font-bold flex gap-1 items-center"><Plus size={16} /> Añadir</button></div>
+          <div className="glass rounded-2xl p-4 mb-6"><div className="flex justify-between"><div><p className="text-xs text-zinc-500">Código para invitar</p><p className="text-2xl font-black tracking-[.2em] mt-1">{group.id}</p></div><button onClick={copyCode} className="self-center bg-white/10 p-3 rounded-xl"><Copy size={17} /></button></div><p className="text-xs text-zinc-500 mt-3">Comparte el código y la otra persona podrá unirse desde su móvil.</p></div>
           <h3 className="font-bold mb-3">Participantes ({members.length})</h3>
-          {members.map(m=><div key={m.uid} className="glass rounded-xl p-3 mb-2 flex items-center gap-3"><div className="w-10 h-10 rounded-full bg-lime-300/15 text-lime-300 grid place-items-center font-bold">{m.name.slice(0,1).toUpperCase()}</div><span className="flex-1 font-medium">{m.name}{m.uid===group.ownerId&&<Crown size={12} className="inline ml-2 text-amber-300"/>}</span>{m.uid!==group.ownerId&&<button onClick={()=>run(()=>removeMember(active,m.uid))} className="text-zinc-600 p-2"><Trash2 size={16}/></button>}</div>)}
-          <div className="flex justify-between items-center mt-8 mb-3"><h3 className="font-bold">Tareas del grupo ({tasks.length})</h3><button onClick={()=>setModal("task")} className="text-lime-300 text-sm font-semibold"><Plus size={15} className="inline"/> Añadir</button></div>
-          {tasks.length===0 ? <div className="glass rounded-xl p-4"><p className="text-sm text-zinc-400">Aún no hay tareas personalizadas. Se usarán las 5 tareas predeterminadas.</p><button onClick={addDefaultTasks} className="text-lime-300 text-sm mt-3">Añadir tareas predeterminadas</button></div> : tasks.map(t=><div key={t.id} className="glass rounded-xl p-3 mb-2 flex justify-between text-sm"><span>{t.title}</span><button onClick={()=>run(()=>removeTask(active,t.id))} className="text-zinc-600"><Trash2 size={15}/></button></div>)}
-          {tasks.length>0&&<button onClick={addDefaultTasks} className="text-xs text-zinc-500 mt-2">Añadir también las tareas predeterminadas</button>}
+          {members.map(m => <div key={m.uid} className="glass rounded-xl p-3 mb-2 flex items-center gap-3"><div className="w-10 h-10 rounded-full bg-lime-300/15 text-lime-300 grid place-items-center font-bold">{m.name.slice(0, 1).toUpperCase()}</div><span className="flex-1 font-medium">{m.name}{m.uid === group.ownerId && <Crown size={12} className="inline ml-2 text-amber-300" />}</span>{m.uid !== group.ownerId && <button onClick={() => run(() => removeMember(active, m.uid))} className="text-zinc-600 p-2"><Trash2 size={16} /></button>}</div>)}
+          <div className="flex justify-between items-center mt-8 mb-3">
+            <h3 className="font-bold">Tareas del grupo ({tasks.length})</h3>
+
+            <button
+              onClick={() => setModal("task")}
+              className="text-lime-300 text-sm font-semibold"
+            >
+              <Plus size={15} className="inline" /> Añadir
+            </button>
+          </div>
+
+          {tasks.length === 0 ? (
+            <div className="glass rounded-xl p-4">
+              <p className="text-sm text-zinc-400">
+                Este grupo todavía no tiene tareas. Puedes añadirlas manualmente o utilizar las tareas predeterminadas.
+              </p>
+
+              {!defaultTasksAdded && (
+                <button
+                  onClick={addDefaultTasks}
+                  disabled={busy}
+                  className="text-lime-300 text-sm mt-3 font-semibold"
+                >
+                  + Añadir tareas predeterminadas
+                </button>
+              )}
+            </div>
+          ) : (
+            <>
+              {tasks.map(task => (
+                <div
+                  key={task.id}
+                  className="glass rounded-xl p-3 mb-2 flex justify-between text-sm"
+                >
+                  <span>{task.title}</span>
+
+                  <button
+                    onClick={() => run(() => removeTask(active, task.id))}
+                    className="text-zinc-600"
+                    aria-label={`Eliminar tarea ${task.title}`}
+                  >
+                    <Trash2 size={15} />
+                  </button>
+                </div>
+              ))}
+
+              {tasks.length > 0 && !defaultTasksAdded && (
+                <button
+                  onClick={addDefaultTasks}
+                  disabled={busy}
+                  className="text-xs text-zinc-500 mt-2"
+                >
+                  + Añadir también las tareas predeterminadas
+                </button>
+              )}
+            </>
+          )}
         </section>}
-        {tab==="ranking" && <section>
-          <div className="text-center py-6"><div className="w-16 h-16 rounded-2xl bg-rose-400/10 text-rose-300 grid place-items-center mx-auto"><Trophy size={30}/></div><p className="text-xs uppercase tracking-widest text-zinc-500 mt-4">Hall of Shame</p><h2 className="text-3xl font-black mt-1">Los más <span className="text-rose-300">escaqueados</span></h2><p className="text-sm text-zinc-500 mt-2">Ranking de multas registradas durante el mes actual.</p></div>
-          {sorted.map((m,i)=><div key={m.uid} className={cx("glass rounded-2xl p-4 mb-3 flex items-center gap-3",i===0&&m.count>0&&"border-rose-300/30")}><div className="text-xl w-8 text-center">{i===0?"🥇":i===1?"🥈":i===2?"🥉":`${i+1}.`}</div><div className="flex-1"><p className="font-bold">{m.name}</p><p className="text-xs text-zinc-500">{m.count} escaqueos/multas · {m.euros.toFixed(2)} €</p></div><span className="text-rose-300 font-black text-xl">{m.count}</span></div>)}
-          {sorted.length===0&&<p className="text-center text-zinc-500 text-sm">Todavía no hay datos.</p>}
-          <button onClick={()=>{setFineTarget("");setModal("fine");}} disabled={!members.length} className="mt-4 w-full glass rounded-xl py-4 font-bold flex justify-center gap-2 items-center"><Gavel size={17}/> Registrar escaqueo / multa</button>
-          <div className="mt-7"><h3 className="font-bold mb-3">Historial de multas</h3>{penalties.slice(0,12).map(p=><div key={p.id} className="glass rounded-xl p-3 mb-2 flex items-center gap-3"><div className="rounded-lg bg-rose-300/10 text-rose-300 p-2">{p.type==="money"?<Wallet size={17}/>:<ShieldAlert size={17}/>}</div><div className="flex-1 min-w-0"><p className="text-sm font-semibold">{p.targetName}</p><p className="text-xs text-zinc-500 truncate">{p.description}</p></div><span className="text-sm font-bold">{p.type==="money"?`${(p.amount||0).toFixed(2)} €`:"Reto"}</span></div>)}</div>
+        {tab === "ranking" && <section>
+          <div className="text-center py-6"><div className="w-16 h-16 rounded-2xl bg-rose-400/10 text-rose-300 grid place-items-center mx-auto"><Trophy size={30} /></div><p className="text-xs uppercase tracking-widest text-zinc-500 mt-4">Hall of Shame</p><h2 className="text-3xl font-black mt-1">Los más <span className="text-rose-300">escaqueados</span></h2><p className="text-sm text-zinc-500 mt-2">Ranking de multas registradas durante el mes actual.</p></div>
+          {sorted.map((m, i) => <div key={m.uid} className={cx("glass rounded-2xl p-4 mb-3 flex items-center gap-3", i === 0 && m.count > 0 && "border-rose-300/30")}><div className="text-xl w-8 text-center">{i === 0 ? "🥇" : i === 1 ? "🥈" : i === 2 ? "🥉" : `${i + 1}.`}</div><div className="flex-1"><p className="font-bold">{m.name}</p><p className="text-xs text-zinc-500">{m.count} escaqueos/multas · {m.euros.toFixed(2)} €</p></div><span className="text-rose-300 font-black text-xl">{m.count}</span></div>)}
+          {sorted.length === 0 && <p className="text-center text-zinc-500 text-sm">Todavía no hay datos.</p>}
+          <button onClick={() => { setFineTarget(""); setModal("fine"); }} disabled={!members.length} className="mt-4 w-full glass rounded-xl py-4 font-bold flex justify-center gap-2 items-center"><Gavel size={17} /> Registrar escaqueo / multa</button>
+          <div className="mt-7"><h3 className="font-bold mb-3">Historial de multas</h3>{penalties.slice(0, 12).map(p => <div key={p.id} className="glass rounded-xl p-3 mb-2 flex items-center gap-3"><div className="rounded-lg bg-rose-300/10 text-rose-300 p-2">{p.type === "money" ? <Wallet size={17} /> : <ShieldAlert size={17} />}</div><div className="flex-1 min-w-0"><p className="text-sm font-semibold">{p.targetName}</p><p className="text-xs text-zinc-500 truncate">{p.description}</p></div><span className="text-sm font-bold">{p.type === "money" ? `${(p.amount || 0).toFixed(2)} €` : "Reto"}</span></div>)}</div>
         </section>}
       </>}
     </div>
 
-    {group&&<nav className="fixed bottom-0 inset-x-0 z-30 safe-bottom pt-3 bg-[#0c0f18]/95 backdrop-blur-xl border-t border-white/10"><div className="max-w-xl mx-auto grid grid-cols-3 px-5"><NavButton active={tab==="ruleta"} onClick={()=>setTab("ruleta")} icon={<RotateCw size={20}/>} label="Ruleta"/><NavButton active={tab==="grupo"} onClick={()=>setTab("grupo")} icon={<Users size={20}/>} label="Grupo"/><NavButton active={tab==="ranking"} onClick={()=>setTab("ranking")} icon={<Trophy size={20}/>} label="Ranking"/></div></nav>}
-    {modal&&<Modal title={modal==="create"?"Crear grupo":modal==="join"?"Unirme a un grupo":modal==="member"?"Añadir participante":modal==="task"?"Nueva tarea":"Registrar multa"} close={()=>setModal(null)}>
-      {(modal==="create"||modal==="join")&&<>{modal==="create"&&<Field label="Nombre del grupo" value={groupName} set={setGroupName} placeholder="Piso estudiantes"/>}{modal==="join"&&<Field label="Código del grupo" value={joinCode} set={setJoinCode} placeholder="ABC123"/>}<Field label="Tu nombre" value={personName} set={setPersonName} placeholder="¿Cómo te llamas?"/><Action onClick={modal==="create"?create:join} disabled={busy}>{busy?"Un momento…":modal==="create"?"Crear grupo":"Entrar en el grupo"}</Action></>}
-      {modal==="member"&&<><Field label="Nombre del participante" value={personName} set={setPersonName} placeholder="Nombre"/><Action onClick={()=>run(async()=>{if(!personName.trim())throw new Error("Escribe un nombre.");await addMember(active,crypto.randomUUID(),personName.trim());setPersonName("");setModal(null);})} disabled={busy}>Añadir participante</Action><p className="text-xs text-zinc-500 mt-3">Para invitar a alguien a usar su propio móvil, comparte el código del grupo.</p></>}
-      {modal==="task"&&<><Field label="Nombre de la tarea" value={taskName} set={setTaskName} placeholder="Limpiar el baño"/><Action onClick={()=>run(async()=>{if(!taskName.trim())throw new Error("Escribe una tarea.");await addTask(active,taskName.trim());setTaskName("");setModal(null);})} disabled={busy}>Guardar tarea</Action></>}
-      {modal==="fine"&&<><label className="text-xs text-zinc-400">¿Quién se ha escaqueado?</label><select value={fineTarget} onChange={e=>setFineTarget(e.target.value)} className="w-full mt-2 mb-4 bg-[#111520] border border-white/10 rounded-xl p-3 outline-none"><option value="">Selecciona participante</option>{members.map(m=><option key={m.uid} value={m.uid}>{m.name}</option>)}</select><label className="text-xs text-zinc-400">Tipo de multa</label><div className="grid grid-cols-2 gap-2 mt-2 mb-4"><button onClick={()=>setFineType("money")} className={cx("rounded-xl p-3 border text-sm",fineType==="money"?"border-lime-300 bg-lime-300/10 text-lime-200":"border-white/10")}>💶 Económica</button><button onClick={()=>setFineType("challenge")} className={cx("rounded-xl p-3 border text-sm",fineType==="challenge"?"border-lime-300 bg-lime-300/10 text-lime-200":"border-white/10")}>🎯 Reto / castigo</button></div>{fineType==="money"&&<Field label="Cantidad (€)" value={fineAmount} set={setFineAmount} placeholder="2" type="number"/>}<Field label={fineType==="money"?"Motivo":"Describe el reto"} value={fineDescription} set={setFineDescription} placeholder="Invita a un café"/><Action onClick={addFine} disabled={busy}>Registrar multa</Action></>}
+    {group && <nav className="fixed bottom-0 inset-x-0 z-30 safe-bottom pt-3 bg-[#0c0f18]/95 backdrop-blur-xl border-t border-white/10"><div className="max-w-xl mx-auto grid grid-cols-3 px-5"><NavButton active={tab === "ruleta"} onClick={() => setTab("ruleta")} icon={<RotateCw size={20} />} label="Ruleta" /><NavButton active={tab === "grupo"} onClick={() => setTab("grupo")} icon={<Users size={20} />} label="Grupo" /><NavButton active={tab === "ranking"} onClick={() => setTab("ranking")} icon={<Trophy size={20} />} label="Ranking" /></div></nav>}
+    {modal && <Modal title={modal === "create" ? "Crear grupo" : modal === "join" ? "Unirme a un grupo" : modal === "member" ? "Añadir participante" : modal === "task" ? "Nueva tarea" : "Registrar multa"} close={() => setModal(null)}>
+      {(modal === "create" || modal === "join") && <>{modal === "create" && <Field label="Nombre del grupo" value={groupName} set={setGroupName} placeholder="Piso estudiantes" />}{modal === "join" && <Field label="Código del grupo" value={joinCode} set={setJoinCode} placeholder="ABC123" />}<Field label="Tu nombre" value={personName} set={setPersonName} placeholder="¿Cómo te llamas?" /><Action onClick={modal === "create" ? create : join} disabled={busy}>{busy ? "Un momento…" : modal === "create" ? "Crear grupo" : "Entrar en el grupo"}</Action></>}
+      {modal === "member" && <><Field label="Nombre del participante" value={personName} set={setPersonName} placeholder="Nombre" /><Action onClick={() => run(async () => { if (!personName.trim()) throw new Error("Escribe un nombre."); await addMember(active, crypto.randomUUID(), personName.trim()); setPersonName(""); setModal(null); })} disabled={busy}>Añadir participante</Action><p className="text-xs text-zinc-500 mt-3">Para invitar a alguien a usar su propio móvil, comparte el código del grupo.</p></>}
+      {modal === "task" && <><Field label="Nombre de la tarea" value={taskName} set={setTaskName} placeholder="Limpiar el baño" /><Action onClick={() => run(async () => { if (!taskName.trim()) throw new Error("Escribe una tarea."); await addTask(active, taskName.trim()); setTaskName(""); setModal(null); })} disabled={busy}>Guardar tarea</Action></>}
+      {modal === "fine" && <><label className="text-xs text-zinc-400">¿Quién se ha escaqueado?</label><select value={fineTarget} onChange={e => setFineTarget(e.target.value)} className="w-full mt-2 mb-4 bg-[#111520] border border-white/10 rounded-xl p-3 outline-none"><option value="">Selecciona participante</option>{members.map(m => <option key={m.uid} value={m.uid}>{m.name}</option>)}</select><label className="text-xs text-zinc-400">Tipo de multa</label><div className="grid grid-cols-2 gap-2 mt-2 mb-4"><button onClick={() => setFineType("money")} className={cx("rounded-xl p-3 border text-sm", fineType === "money" ? "border-lime-300 bg-lime-300/10 text-lime-200" : "border-white/10")}>💶 Económica</button><button onClick={() => setFineType("challenge")} className={cx("rounded-xl p-3 border text-sm", fineType === "challenge" ? "border-lime-300 bg-lime-300/10 text-lime-200" : "border-white/10")}>🎯 Reto / castigo</button></div>{fineType === "money" && <Field label="Cantidad (€)" value={fineAmount} set={setFineAmount} placeholder="2" type="number" />}<Field label={fineType === "money" ? "Motivo" : "Describe el reto"} value={fineDescription} set={setFineDescription} placeholder="Invita a un café" /><Action onClick={addFine} disabled={busy}>Registrar multa</Action></>}
     </Modal>}
   </main>;
 }
 
-function NavButton({active,onClick,icon,label}:{active:boolean;onClick:()=>void;icon:React.ReactNode;label:string}) {
-  return <button onClick={onClick} className={cx("flex flex-col items-center gap-1 py-1 text-[11px]",active?"text-lime-300":"text-zinc-500")}>{icon}<span className="font-semibold">{label}</span></button>;
+function NavButton({ active, onClick, icon, label }: { active: boolean; onClick: () => void; icon: React.ReactNode; label: string }) {
+  return <button onClick={onClick} className={cx("flex flex-col items-center gap-1 py-1 text-[11px]", active ? "text-lime-300" : "text-zinc-500")}>{icon}<span className="font-semibold">{label}</span></button>;
 }
-function Modal({title,close,children}:{title:string;close:()=>void;children:React.ReactNode}) {
-  return <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-end sm:items-center justify-center p-0 sm:p-5" onMouseDown={e=>{if(e.target===e.currentTarget)close();}}><div className="w-full max-w-md glass rounded-t-3xl sm:rounded-3xl p-5 pb-8 safe-bottom animate-in"><div className="flex justify-between items-center mb-5"><h2 className="text-xl font-black">{title}</h2><button onClick={close} className="p-2 rounded-xl bg-white/5"><X size={18}/></button></div>{children}</div></div>;
+function Modal({ title, close, children }: { title: string; close: () => void; children: React.ReactNode }) {
+  return <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-end sm:items-center justify-center p-0 sm:p-5" onMouseDown={e => { if (e.target === e.currentTarget) close(); }}><div className="w-full max-w-md glass rounded-t-3xl sm:rounded-3xl p-5 pb-8 safe-bottom animate-in"><div className="flex justify-between items-center mb-5"><h2 className="text-xl font-black">{title}</h2><button onClick={close} className="p-2 rounded-xl bg-white/5"><X size={18} /></button></div>{children}</div></div>;
 }
-function Field({label,value,set,placeholder,type="text"}:{label:string;value:string;set:(s:string)=>void;placeholder:string;type?:string}) {
-  return <label className="block mb-4"><span className="text-xs text-zinc-400">{label}</span><input type={type} value={value} onChange={e=>set(e.target.value)} placeholder={placeholder} className="mt-2 w-full bg-[#111520] border border-white/10 rounded-xl p-3 outline-none focus:border-lime-300/50"/></label>;
+function Field({ label, value, set, placeholder, type = "text" }: { label: string; value: string; set: (s: string) => void; placeholder: string; type?: string }) {
+  return <label className="block mb-4"><span className="text-xs text-zinc-400">{label}</span><input type={type} value={value} onChange={e => set(e.target.value)} placeholder={placeholder} className="mt-2 w-full bg-[#111520] border border-white/10 rounded-xl p-3 outline-none focus:border-lime-300/50" /></label>;
 }
-function Action({children,onClick,disabled}:{children:React.ReactNode;onClick:()=>void;disabled:boolean}) {
+function Action({ children, onClick, disabled }: { children: React.ReactNode; onClick: () => void; disabled: boolean }) {
   return <button onClick={onClick} disabled={disabled} className="w-full rounded-xl bg-lime-300 text-black font-black py-3.5 mt-2 disabled:opacity-50">{children}</button>;
 }
 function SetupScreen() {
