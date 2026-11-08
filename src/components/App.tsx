@@ -19,7 +19,8 @@ import {
   removeMember,
   removeTask,
   saveDraw,
-  updateDrawTask
+  updateDrawTask,
+  addDefaultTasksToGroup,
 } from "@/lib/store";
 import { buzz, fanfare, tick } from "@/lib/audio";
 
@@ -30,7 +31,7 @@ const DEFAULT_TASKS = [
   "Fregar los platos",
   "Pasear al perro",
   "Pagar los cafés",
-  "Hacer la compra",
+  "Hacer la compra"
 ];
 
 type Tab = "ruleta" | "grupo" | "ranking";
@@ -55,6 +56,7 @@ export default function App() {
   const [activeGroupData, setActiveGroupData] = useState<Group | null>(null);
   const [joinedGroups, setJoinedGroups] = useState<Group[]>([]);
   const [defaultTasksAdded, setDefaultTasksAdded] = useState(false);
+
   useEffect(() => {
     if (!uid || !firebaseConfigured) return;
 
@@ -252,15 +254,14 @@ export default function App() {
   const copyCode = async () => { await navigator.clipboard.writeText(active); setNotice("Código copiado. ¡Compártelo!"); };
   const addDefaultTasks = () =>
     run(async () => {
-      const existingTitles = new Set(tasks.map(task => task.title));
+      await addDefaultTasksToGroup(active, DEFAULT_TASKS);
 
-      for (const task of DEFAULT_TASKS) {
-        if (!existingTitles.has(task)) {
-          await addTask(active, task);
-        }
-      }
+      setActiveGroupData(previous =>
+        previous?.id === active
+          ? { ...previous, defaultTasksAdded: true }
+          : previous
+      );
 
-      setDefaultTasksAdded(true);
       setNotice("Tareas predeterminadas añadidas.");
     });
 
@@ -429,7 +430,7 @@ export default function App() {
                 Este grupo todavía no tiene tareas. Puedes añadirlas manualmente o utilizar las tareas predeterminadas.
               </p>
 
-              {!defaultTasksAdded && (
+              {group?.defaultTasksAdded !== true && (
                 <button
                   onClick={addDefaultTasks}
                   disabled={busy}
@@ -458,15 +459,17 @@ export default function App() {
                 </div>
               ))}
 
-              {tasks.length > 0 && !defaultTasksAdded && (
-                <button
-                  onClick={addDefaultTasks}
-                  disabled={busy}
-                  className="text-xs text-zinc-500 mt-2"
-                >
-                  + Añadir también las tareas predeterminadas
-                </button>
-              )}
+              {!DEFAULT_TASKS.some(defaultTask =>
+                tasks.some(task => task.title === defaultTask)
+              ) && (
+                  <button
+                    onClick={addDefaultTasks}
+                    disabled={busy}
+                    className="text-lime-300 text-sm mt-3 font-semibold"
+                  >
+                    + Añadir también las tareas predeterminadas
+                  </button>
+                )}
             </>
           )}
         </section>}

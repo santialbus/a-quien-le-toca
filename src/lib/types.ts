@@ -5,4 +5,10 @@ export type Penalty = {
   amount?: number; description: string; createdBy: string; createdAt?: unknown;
 };
 export type Draw = { id: string; winnerUid: string; winnerName: string; taskTitle: string; createdBy: string; createdAt?: unknown };
-export type Group = { id: string; name: string; ownerId: string; createdAt?: unknown };
+export type Group = {
+  id: string;
+  name: string;
+  ownerId: string;
+  createdAt?: unknown;
+  defaultTasksAdded?: boolean;
+};

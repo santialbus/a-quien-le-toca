@@ -4,9 +4,11 @@ import {
   deleteDoc,
   doc,
   getDoc,
+  getDocs,
   onSnapshot,
   orderBy,
   query,
+  runTransaction,
   serverTimestamp,
   setDoc,
   updateDoc,
@@ -26,7 +28,7 @@ export async function createGroup(name: string, uid: string, memberName: string)
   const alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
   const groupId = Array.from(bytes, b => alphabet[b % alphabet.length]).join("");
   const ref = doc(database(), "groups", groupId);
-  await setDoc(ref, { name, ownerId: uid, createdAt: serverTimestamp() });
+  await setDoc(ref, { name, ownerId: uid, createdAt: serverTimestamp(), defaultTasksAdded: false });
   await setDoc(doc(ref, "members", uid), { uid, name: memberName, joinedAt: serverTimestamp() });
   return groupId;
 }
@@ -133,4 +135,46 @@ export async function updateDrawTask(groupId: string, drawId: string, taskTitle:
     doc(database(), "groups", groupId, "draws", drawId),
     { taskTitle }
   );
+}
+
+export async function addDefaultTasksToGroup(
+  groupId: string,
+  defaultTasks: string[]
+) {
+  const dbInstance = database();
+  const groupRef = doc(dbInstance, "groups", groupId);
+
+  // Leemos las tareas existentes fuera de la transacción.
+  const tasksSnapshot = await getDocs(col(groupId, "tasks"));
+
+  const existingTitles = new Set(
+    tasksSnapshot.docs.map(task => task.data().title as string)
+  );
+
+  await runTransaction(dbInstance, async transaction => {
+    const groupSnapshot = await transaction.get(groupRef);
+
+    if (!groupSnapshot.exists()) {
+      throw new Error("No existe el grupo.");
+    }
+
+    if (groupSnapshot.data().defaultTasksAdded === true) {
+      return;
+    }
+
+    for (const title of defaultTasks) {
+      if (!existingTitles.has(title)) {
+        const taskRef = doc(col(groupId, "tasks"));
+
+        transaction.set(taskRef, {
+          title,
+          createdAt: serverTimestamp()
+        });
+      }
+    }
+
+    transaction.update(groupRef, {
+      defaultTasksAdded: true
+    });
+  });
 }
