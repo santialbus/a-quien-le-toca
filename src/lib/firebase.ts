@@ -1,3 +1,4 @@
+
 import { initializeApp, getApps, getApp } from "firebase/app";
 import { getAuth } from "firebase/auth";
 import { getFirestore } from "firebase/firestore";
@@ -12,7 +13,6 @@ const firebaseConfig = {
   measurementId: process.env.NEXT_PUBLIC_FIREBASE_MEASUREMENT_ID,
 };
 
-// Comprobar que la configuración está completa
 export const firebaseConfigured = Boolean(
   firebaseConfig.apiKey &&
   firebaseConfig.authDomain &&
@@ -21,7 +21,6 @@ export const firebaseConfigured = Boolean(
   firebaseConfig.messagingSenderId
 );
 
-// Inicializar Firebase solo si hay configuración
 const app = firebaseConfigured
   ? getApps().length
     ? getApp()
@@ -31,3 +30,45 @@ const app = firebaseConfigured
 // Servicios Firebase
 export const auth = app ? getAuth(app) : null;
 export const db = app ? getFirestore(app) : null;
+
+// Google Analytics
+export async function getFirebaseAnalytics() {
+  if (
+    typeof window === "undefined" ||
+    !app ||
+    !firebaseConfig.measurementId
+  ) {
+    return null;
+  }
+
+  const { isSupported, getAnalytics } = await import("firebase/analytics");
+
+  if (!(await isSupported())) {
+    return null;
+  }
+
+  return getAnalytics(app);
+}
+
+export async function trackEvent(
+  eventName: string,
+  params: Record<string, string | number | boolean> = {}
+) {
+  if (
+    typeof window === "undefined" ||
+    window.localStorage.getItem("analyticsConsent") !== "accepted"
+  ) {
+    return;
+  }
+
+  try {
+    const analytics = await getFirebaseAnalytics();
+
+    if (!analytics) return;
+
+    const { logEvent } = await import("firebase/analytics");
+    logEvent(analytics, eventName, params);
+  } catch (error) {
+    console.warn("No se pudo registrar el evento de Analytics:", error);
+  }
+}

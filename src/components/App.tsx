@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { onAuthStateChanged, signInAnonymously } from "firebase/auth";
 import { AlertCircle, ArrowLeft, Check, ChevronDown, CirclePlus, Copy, Crown, Gavel, Home, LoaderCircle, Plus, RotateCw, Settings, ShieldAlert, Sparkles, Trash2, Trophy, Users, Volume2, Wallet, X } from "lucide-react";
-import { auth, firebaseConfigured } from "@/lib/firebase";
+import { auth, firebaseConfigured, trackEvent } from "@/lib/firebase";
 import {
   addMember,
   addPenalty,
@@ -109,6 +109,10 @@ export default function App() {
   const lastAnimatedSpin = useRef("");
   const lastCelebratedSpin = useRef("");
   const initialFinishedSpin = useRef("");
+
+  const [analyticsConsent, setAnalyticsConsent] = useState<
+    "accepted" | "rejected" | null
+  >(null);
 
   useEffect(() => {
     if (!uid || !firebaseConfigured) return;
@@ -309,6 +313,14 @@ export default function App() {
   }, [rouletteState, active]);
 
   useEffect(() => {
+    const saved = window.localStorage.getItem("analyticsConsent");
+
+    if (saved === "accepted" || saved === "rejected") {
+      setAnalyticsConsent(saved);
+    }
+  }, []);
+
+  useEffect(() => {
     if (tasks.length === 0) {
       setSelectedTask("");
     } else if (!tasks.some(task => task.title === selectedTask)) {
@@ -337,9 +349,19 @@ export default function App() {
     finally { setBusy(false); }
   };
   const create = () => run(async () => {
-    if (!groupName.trim() || !personName.trim()) throw new Error("Indica el nombre del grupo y el tuyo.");
+    if (!groupName.trim() || !personName.trim()) {
+      throw new Error("Indica el nombre del grupo y el tuyo.");
+    }
+
     const id = await createGroup(groupName.trim(), uid, personName.trim());
-    setActive(id); setModal(null); setGroupName(""); setPersonName(""); setTab("ruleta");
+
+    trackEvent("group_created");
+
+    setActive(id);
+    setModal(null);
+    setGroupName("");
+    setPersonName("");
+    setTab("ruleta");
   });
   const join = () => run(async () => {
     if (!joinCode.trim() || !personName.trim()) {
@@ -351,6 +373,8 @@ export default function App() {
       uid,
       personName.trim()
     );
+
+    trackEvent("group_joined");
 
     setActiveGroupData(joinedGroup);
     setJoinedGroups(previous => {
@@ -385,6 +409,7 @@ export default function App() {
         taskTitle: selectedTask,
         createdBy: uid,
       });
+      trackEvent("roulette_spin");
     });
   };
 
@@ -410,6 +435,8 @@ export default function App() {
       createdBy: uid,
       ...(fineType === "money" ? { amount } : {})
     });
+
+    trackEvent("penalty_added");
 
     setModal(null);
     setFineTarget("");
@@ -439,8 +466,15 @@ export default function App() {
       setNotice("¡Pack de desgracias incorporado!");
     });
 
+  const chooseAnalyticsConsent = (consent: "accepted" | "rejected") => {
+    window.localStorage.setItem("analyticsConsent", consent);
+    setAnalyticsConsent(consent);
+  };
+
   if (!firebaseConfigured) return <SetupScreen />;
-  if (authError) return <main className="min-h-screen grid place-items-center p-6"><div className="glass rounded-3xl p-6 max-w-md"><AlertCircle className="text-rose-400 mb-3" /><h1 className="text-xl font-bold">No se pudo conectar</h1><p className="text-zinc-400 mt-2 text-sm">{authError}</p><p className="text-zinc-500 text-xs mt-4">Comprueba Firebase Authentication y habilita el proveedor Anónimo.</p></div></main>;
+  if (authError) return <main className="min-h-screen grid place-items-center p-6"><div className="glass rounded-3xl p-6 max-w-md"><AlertCircle className="text-rose-400 mb-3" /><h1 className="text-xl font-bold">No se pudo conectar</h1><p className="text-zinc-400 mt-2 text-sm">{authError}</p><p className="text-zinc-500 text-xs mt-4">Comprueba Firebase Authentication y habilita el proveedor Anónimo.</p></div>
+  
+  </main>;
   if (!uid) return <main className="min-h-screen grid place-items-center"><LoaderCircle className="animate-spin text-lime-300" /></main>;
 
   return <main className="min-h-screen pb-40">
@@ -884,6 +918,30 @@ export default function App() {
       {modal === "task" && <><Field label="Nombre de la tarea" value={taskName} set={setTaskName} placeholder="Limpiar el baño" /><Action onClick={() => run(async () => { if (!taskName.trim()) throw new Error("Escribe una tarea."); await addTask(active, taskName.trim()); setTaskName(""); setModal(null); })} disabled={busy}>Guardar tarea</Action></>}
       {modal === "fine" && <><label className="text-xs text-zinc-400">¿Quién se ha escaqueado?</label><select value={fineTarget} onChange={e => setFineTarget(e.target.value)} className="w-full mt-2 mb-4 bg-[#111520] border border-white/10 rounded-xl p-3 outline-none"><option value="">Selecciona participante</option>{members.map(m => <option key={m.uid} value={m.uid}>{m.name}</option>)}</select><label className="text-xs text-zinc-400">Tipo de multa</label><div className="grid grid-cols-2 gap-2 mt-2 mb-4"><button onClick={() => setFineType("money")} className={cx("rounded-xl p-3 border text-sm", fineType === "money" ? "border-lime-300 bg-lime-300/10 text-lime-200" : "border-white/10")}>💶 Económica</button><button onClick={() => setFineType("challenge")} className={cx("rounded-xl p-3 border text-sm", fineType === "challenge" ? "border-lime-300 bg-lime-300/10 text-lime-200" : "border-white/10")}>🎯 Reto / castigo</button></div>{fineType === "money" && <Field label="Cantidad (€)" value={fineAmount} set={setFineAmount} placeholder="2" type="number" />}<Field label={fineType === "money" ? "Motivo" : "Describe el reto"} value={fineDescription} set={setFineDescription} placeholder="Invita a un café" /><Action onClick={addFine} disabled={busy}>Registrar multa</Action></>}
     </Modal>}
+
+        {analyticsConsent === null && (
+      <div className="fixed bottom-4 inset-x-4 z-[80] max-w-xl mx-auto glass rounded-2xl border border-white/10 p-4 shadow-2xl">
+        <p className="font-bold text-sm">¿Nos ayudas a mejorar?</p>
+        <p className="text-xs text-zinc-400 mt-2 leading-5">
+          Podemos utilizar Google Analytics para conocer el uso de la aplicación
+          y mejorarla. Tú decides si quieres compartir esos datos.
+        </p>
+        <div className="flex gap-2 mt-4">
+          <button
+            onClick={() => chooseAnalyticsConsent("rejected")}
+            className="flex-1 rounded-xl bg-white/10 py-3 text-sm font-semibold"
+          >
+            Rechazar
+          </button>
+          <button
+            onClick={() => chooseAnalyticsConsent("accepted")}
+            className="flex-1 rounded-xl bg-lime-300 text-black py-3 text-sm font-bold"
+          >
+            Aceptar
+          </button>
+        </div>
+      </div>
+    )}
   </main>;
 }
 
