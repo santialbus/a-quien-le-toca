@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from "next";
 import "./globals.css";
+import Script from "next/script";
 
 export const metadata: Metadata = {
   title: "¿A quién le toca? — La ruleta de las tareas",
@@ -14,6 +15,26 @@ export const viewport: Viewport = {
   initialScale: 1,
   maximumScale: 1
 };
-export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
-  return <html lang="es"><body>{children}</body></html>;
+
+export default function RootLayout({
+  children
+}: Readonly<{ children: React.ReactNode }>) {
+  const adsenseClient = process.env.NEXT_PUBLIC_ADSENSE_CLIENT;
+
+  return (
+    <html lang="es">
+      <body>
+        {children}
+
+        {adsenseClient && (
+          <Script
+            id="google-adsense"
+            src={`https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=${adsenseClient}`}
+            strategy="afterInteractive"
+            crossOrigin="anonymous"
+          />
+        )}
+      </body>
+    </html>
+  );
 }

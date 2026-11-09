@@ -25,6 +25,7 @@ import {
 import { buzz, fanfare, tick } from "@/lib/audio";
 
 import type { Draw, Group, Member, Penalty, Task } from "@/lib/types";
+import AdBanner from "@/components/AdBanner";
 
 const DEFAULT_TASKS = [
   "Bajar la basura",
@@ -272,7 +273,7 @@ export default function App() {
   if (authError) return <main className="min-h-screen grid place-items-center p-6"><div className="glass rounded-3xl p-6 max-w-md"><AlertCircle className="text-rose-400 mb-3" /><h1 className="text-xl font-bold">No se pudo conectar</h1><p className="text-zinc-400 mt-2 text-sm">{authError}</p><p className="text-zinc-500 text-xs mt-4">Comprueba Firebase Authentication y habilita el proveedor Anónimo.</p></div></main>;
   if (!uid) return <main className="min-h-screen grid place-items-center"><LoaderCircle className="animate-spin text-lime-300" /></main>;
 
-  return <main className="min-h-screen pb-28">
+  return <main className="min-h-screen pb-40">
     <header className="sticky top-0 z-30 px-5 pt-5 pb-4 bg-[#090b12]/90 backdrop-blur-xl border-b border-white/5">
       <div className="max-w-xl mx-auto flex items-center justify-between">
         <div><div className="flex items-center gap-2"><span className="w-8 h-8 rounded-xl bg-lime-300 text-black grid place-items-center font-black">¿!</span><span className="font-black tracking-tight">¿A quién le toca?</span></div><p className="text-[11px] text-zinc-500 mt-1 ml-10">EL DESTINO ESTÁ ECHADO</p></div>
@@ -484,6 +485,13 @@ export default function App() {
       </>}
     </div>
 
+      {!group && (
+        <div className="fixed bottom-0 inset-x-0 z-40 px-5 pt-3 pb-[max(12px,env(safe-area-inset-bottom))] bg-[#0c0f18]/95 backdrop-blur-xl border-t border-white/10">
+          <div className="max-w-xl mx-auto">
+            <AdBanner />
+          </div>
+        </div>
+      )}
     {group && <nav className="fixed bottom-0 inset-x-0 z-30 safe-bottom pt-3 bg-[#0c0f18]/95 backdrop-blur-xl border-t border-white/10"><div className="max-w-xl mx-auto grid grid-cols-3 px-5"><NavButton active={tab === "ruleta"} onClick={() => setTab("ruleta")} icon={<RotateCw size={20} />} label="Ruleta" /><NavButton active={tab === "grupo"} onClick={() => setTab("grupo")} icon={<Users size={20} />} label="Grupo" /><NavButton active={tab === "ranking"} onClick={() => setTab("ranking")} icon={<Trophy size={20} />} label="Ranking" /></div></nav>}
     {modal && <Modal title={modal === "create" ? "Crear grupo" : modal === "join" ? "Unirme a un grupo" : modal === "member" ? "Añadir participante" : modal === "task" ? "Nueva tarea" : "Registrar multa"} close={() => setModal(null)}>
       {(modal === "create" || modal === "join") && <>{modal === "create" && <Field label="Nombre del grupo" value={groupName} set={setGroupName} placeholder="Piso estudiantes" />}{modal === "join" && <Field label="Código del grupo" value={joinCode} set={setJoinCode} placeholder="ABC123" />}<Field label="Tu nombre" value={personName} set={setPersonName} placeholder="¿Cómo te llamas?" /><Action onClick={modal === "create" ? create : join} disabled={busy}>{busy ? "Un momento…" : modal === "create" ? "Crear grupo" : "Entrar en el grupo"}</Action></>}
