@@ -416,7 +416,7 @@ export default function App() {
     setFineDescription("Invita a un café");
     setFineType("money");
   });
-  const copyCode = async () => { await navigator.clipboard.writeText(active); setNotice("Código copiado. ¡Compártelo!"); };
+  const copyCode = async () => { await navigator.clipboard.writeText(active); setNotice("Código copiado. ¡Que empiece el reclutamiento!"); };
   const allGroups = useMemo(() => {
     const uniqueGroups = new Map();
 
@@ -436,7 +436,7 @@ export default function App() {
           : previous
       );
 
-      setNotice("Tareas predeterminadas añadidas.");
+      setNotice("¡Pack de desgracias incorporado!");
     });
 
   if (!firebaseConfigured) return <SetupScreen />;
@@ -453,8 +453,8 @@ export default function App() {
 
     <div className="max-w-xl mx-auto px-5 pt-5">
       {!group ? <div className="pt-10">
-        <div className="text-center mb-8"><div className="mx-auto w-24 h-24 rounded-[2rem] bg-lime-300/10 border border-lime-300/20 grid place-items-center mb-5"><Sparkles size={42} className="text-lime-300" /></div><h1 className="text-3xl font-black tracking-tight">Que decida <span className="text-lime-300">la suerte.</span></h1><p className="text-zinc-400 mt-3 text-sm leading-6">Reparte tareas, evita discusiones y descubre quién se escaquea más.</p></div>
-        <div className="grid grid-cols-2 gap-3"><button onClick={() => setModal("create")} className="rounded-2xl bg-lime-300 text-black p-5 text-left font-bold"><CirclePlus /><span className="block mt-4">Crear grupo</span><span className="text-xs font-normal opacity-70">Empieza desde cero</span></button><button onClick={() => setModal("join")} className="glass rounded-2xl p-5 text-left font-bold"><Users className="text-lime-300" /><span className="block mt-4">Unirme</span><span className="text-xs text-zinc-500 font-normal">Tengo un código</span></button></div>
+        <div className="text-center mb-8"><div className="mx-auto w-24 h-24 rounded-[2rem] bg-lime-300/10 border border-lime-300/20 grid place-items-center mb-5"><Sparkles size={42} className="text-lime-300" /></div><h1 className="text-3xl font-black tracking-tight">Que decida <span className="text-lime-300">la suerte.</span></h1><p className="text-zinc-400 mt-3 text-sm leading-6">Reparte tareas, evita discusiones y señala al próximo sospechoso.</p></div>
+        <div className="grid grid-cols-2 gap-3"><button onClick={() => setModal("create")} className="rounded-2xl bg-lime-300 text-black p-5 text-left font-bold"><CirclePlus /><span className="block mt-4">Crear grupo</span><span className="text-xs font-normal opacity-70">Una nueva tragedia comienza aquí</span></button><button onClick={() => setModal("join")} className="glass rounded-2xl p-5 text-left font-bold"><Users className="text-lime-300" /><span className="block mt-4">Unirme</span><span className="text-xs text-zinc-500 font-normal">Vengo con invitación</span></button></div>
 
         {allGroups.length > 0 && (
           <div className="mt-8">
@@ -481,7 +481,7 @@ export default function App() {
         </div>
         {notice && <div className="mb-4 rounded-xl bg-rose-400/10 border border-rose-400/20 p-3 text-sm text-rose-200 flex justify-between gap-2"><span>{notice}</span><button onClick={() => setNotice("")}><X size={15} /></button></div>}
         {tab === "ruleta" && <section>
-          <div className="flex justify-between items-center mb-4"><span className="text-xs text-zinc-500 uppercase tracking-widest">Sorteo exprés</span><span className="text-xs text-zinc-500">{members.length} participantes</span></div>
+          <div className="flex justify-between items-center mb-4"><span className="text-xs text-zinc-500 uppercase tracking-widest">Sorteo exprés</span><span className="text-xs text-zinc-500">{members.length} Víctimas disponibles</span></div>
           <div className="glass wheel-glow rounded-[2rem] p-6 relative overflow-hidden">
             <div className="absolute top-0 left-1/2 -translate-x-1/2 -translate-y-1/2 w-44 h-44 bg-lime-300/10 blur-3xl rounded-full" />
             <div className="relative mx-auto w-64 h-64 sm:w-72 sm:h-72">
@@ -515,7 +515,7 @@ export default function App() {
               ) : (
                 <div className="mt-3 rounded-xl border border-white/10 bg-white/5 p-4">
                   <p className="text-sm text-zinc-300">
-                    Este grupo todavía no tiene tareas.
+                    ¿Y qué vamos a repartir? ¿Abrazos?
                   </p>
                   <button
                     onClick={() => setTab("grupo")}
@@ -527,11 +527,11 @@ export default function App() {
               )}
 
               <p className="text-xs text-zinc-500 uppercase tracking-widest mt-5">
-                {spinning ? "EL DESTINO ESTÁ DECIDIENDO…" : "¿QUIÉN SE ENCARGA?"}
+                {spinning ? "Consultando con el karma…" : "Que empiece el reparto de desgracias"}
               </p>
 
               <button
-                disabled={spinning || busy || members.length === 0 || !selectedTask}
+                disabled={spinning || busy || members.length <= 1 || !selectedTask}
                 onClick={spin}
                 className="mt-4 w-full rounded-2xl bg-lime-300 hover:bg-lime-200 disabled:opacity-40 text-black font-black text-lg py-4 flex items-center justify-center gap-2 shadow-lg shadow-lime-300/10"
               >
@@ -546,7 +546,11 @@ export default function App() {
             </div>
           </div>
 
-
+          {members.length <= 1 && (
+            <p className="mt-4 text-center text-sm text-zinc-400">
+              La ruleta necesita víctimas. Añade participantes en la pestaña Grupo para empezar.
+            </p>
+          )}
           {winner && winnerModalOpen && (
             <>
               {/* Confeti por toda la pantalla */}
@@ -634,12 +638,12 @@ export default function App() {
           )}
 
 
-          {members.length === 0 && <p className="text-center text-sm text-zinc-500 mt-5">Añade participantes en la pestaña Grupo para empezar.</p>}
+          
           <div className="mt-6"><div className="flex justify-between mb-3"><h3 className="font-bold">Últimos sorteos</h3><span className="text-xs text-zinc-500">{draws.length} registros</span></div>{draws.slice(0, 4).map(d => <div key={d.id} className="glass rounded-xl p-3 mb-2 flex justify-between text-sm"><span>{d.winnerName} <span className="text-zinc-500">· {d.taskTitle}</span></span><Check size={16} className="text-lime-300" /></div>)}</div>
         </section>}
         {tab === "grupo" && <section>
-          <div className="flex items-center justify-between mb-4"><h2 className="text-xl font-black">Tu grupo</h2><button onClick={() => setModal("member")} className="bg-lime-300 text-black rounded-xl px-3 py-2 text-sm font-bold flex gap-1 items-center"><Plus size={16} /> Añadir</button></div>
-          <div className="glass rounded-2xl p-4 mb-6"><div className="flex justify-between"><div><p className="text-xs text-zinc-500">Código para invitar</p><p className="text-2xl font-black tracking-[.2em] mt-1">{group.id}</p></div><button onClick={copyCode} className="self-center bg-white/10 p-3 rounded-xl"><Copy size={17} /></button></div><p className="text-xs text-zinc-500 mt-3">Comparte el código y la otra persona podrá unirse desde su móvil.</p></div>
+          <div className="flex items-center justify-between mb-4"><h2 className="text-xl font-black">El comité de víctimas</h2><button onClick={() => setModal("member")} className="bg-lime-300 text-black rounded-xl px-3 py-2 text-sm font-bold flex gap-1 items-center"><Plus size={16} /> Reclutar</button></div>
+          <div className="glass rounded-2xl p-4 mb-6"><div className="flex justify-between"><div><p className="text-xs text-zinc-500">Código para reclutar víctimas</p><p className="text-2xl font-black tracking-[.2em] mt-1">{group.id}</p></div><button onClick={copyCode} className="self-center bg-white/10 p-3 rounded-xl"><Copy size={17} /></button></div><p className="text-xs text-zinc-500 mt-3">Pásales el código. Que nadie pueda decir que no estaba avisado.</p></div>
           <h3 className="font-bold mb-3">Participantes ({members.length})</h3>
           {members.map(m => <div key={m.uid} className="glass rounded-xl p-3 mb-2 flex items-center gap-3"><div className="w-10 h-10 rounded-full bg-lime-300/15 text-lime-300 grid place-items-center font-bold">{m.name.slice(0, 1).toUpperCase()}</div><span className="flex-1 font-medium">{m.name}{m.uid === group.ownerId && <Crown size={12} className="inline ml-2 text-amber-300" />}</span>{m.uid !== group.ownerId && <button onClick={() => run(() => removeMember(active, m.uid))} className="text-zinc-600 p-2"><Trash2 size={16} /></button>}</div>)}
           <div className="mt-8 mb-3">
@@ -874,8 +878,8 @@ export default function App() {
       </div>
     )}
     {group && <nav className="fixed bottom-0 inset-x-0 z-30 safe-bottom pt-3 bg-[#0c0f18]/95 backdrop-blur-xl border-t border-white/10"><div className="max-w-xl mx-auto grid grid-cols-3 px-5"><NavButton active={tab === "ruleta"} onClick={() => setTab("ruleta")} icon={<RotateCw size={20} />} label="Ruleta" /><NavButton active={tab === "grupo"} onClick={() => setTab("grupo")} icon={<Users size={20} />} label="Grupo" /><NavButton active={tab === "ranking"} onClick={() => setTab("ranking")} icon={<Trophy size={20} />} label="Ranking" /></div></nav>}
-    {modal && <Modal title={modal === "create" ? "Crear grupo" : modal === "join" ? "Unirme a un grupo" : modal === "member" ? "Añadir participante" : modal === "task" ? "Nueva tarea" : "Registrar multa"} close={() => setModal(null)}>
-      {(modal === "create" || modal === "join") && <>{modal === "create" && <Field label="Nombre del grupo" value={groupName} set={setGroupName} placeholder="Piso estudiantes" />}{modal === "join" && <Field label="Código del grupo" value={joinCode} set={setJoinCode} placeholder="ABC123" />}<Field label="Tu nombre" value={personName} set={setPersonName} placeholder="¿Cómo te llamas?" /><Action onClick={modal === "create" ? create : join} disabled={busy}>{busy ? "Un momento…" : modal === "create" ? "Crear grupo" : "Entrar en el grupo"}</Action></>}
+    {modal && <Modal title={modal === "create" ? "Crear grupo" : modal === "join" ? "Entrar en el lío" : modal === "member" ? "Añadir víctima" : modal === "task" ? "Más trabajo, qué ilusión" : "Que pague el culpable"} close={() => setModal(null)}>
+      {(modal === "create" || modal === "join") && <>{modal === "create" && <Field label="¿Cómo se llama este circo?" value={groupName} set={setGroupName} placeholder="Piso estudiantes" />}{modal === "join" && <Field label="Código del grupo" value={joinCode} set={setJoinCode} placeholder="ABC123" />}<Field label="Tu nombre" value={personName} set={setPersonName} placeholder="¿Cómo te llamas?" /><Action onClick={modal === "create" ? create : join} disabled={busy}>{busy ? "Un momento…" : modal === "create" ? "Crear grupo" : "Entrar en el grupo"}</Action></>}
       {modal === "member" && <><Field label="Nombre del participante" value={personName} set={setPersonName} placeholder="Nombre" /><Action onClick={() => run(async () => { if (!personName.trim()) throw new Error("Escribe un nombre."); await addMember(active, crypto.randomUUID(), personName.trim()); setPersonName(""); setModal(null); })} disabled={busy}>Añadir participante</Action><p className="text-xs text-zinc-500 mt-3">Para invitar a alguien a usar su propio móvil, comparte el código del grupo.</p></>}
       {modal === "task" && <><Field label="Nombre de la tarea" value={taskName} set={setTaskName} placeholder="Limpiar el baño" /><Action onClick={() => run(async () => { if (!taskName.trim()) throw new Error("Escribe una tarea."); await addTask(active, taskName.trim()); setTaskName(""); setModal(null); })} disabled={busy}>Guardar tarea</Action></>}
       {modal === "fine" && <><label className="text-xs text-zinc-400">¿Quién se ha escaqueado?</label><select value={fineTarget} onChange={e => setFineTarget(e.target.value)} className="w-full mt-2 mb-4 bg-[#111520] border border-white/10 rounded-xl p-3 outline-none"><option value="">Selecciona participante</option>{members.map(m => <option key={m.uid} value={m.uid}>{m.name}</option>)}</select><label className="text-xs text-zinc-400">Tipo de multa</label><div className="grid grid-cols-2 gap-2 mt-2 mb-4"><button onClick={() => setFineType("money")} className={cx("rounded-xl p-3 border text-sm", fineType === "money" ? "border-lime-300 bg-lime-300/10 text-lime-200" : "border-white/10")}>💶 Económica</button><button onClick={() => setFineType("challenge")} className={cx("rounded-xl p-3 border text-sm", fineType === "challenge" ? "border-lime-300 bg-lime-300/10 text-lime-200" : "border-white/10")}>🎯 Reto / castigo</button></div>{fineType === "money" && <Field label="Cantidad (€)" value={fineAmount} set={setFineAmount} placeholder="2" type="number" />}<Field label={fineType === "money" ? "Motivo" : "Describe el reto"} value={fineDescription} set={setFineDescription} placeholder="Invita a un café" /><Action onClick={addFine} disabled={busy}>Registrar multa</Action></>}
