@@ -59,27 +59,26 @@ export default function AdBanner() {
 
   return (
     <aside
-      className={`w-full ${
-        isPwa ? "mt-1" : "mt-2"
-      }`}
+      className={`w-full ${isPwa ? "mt-0" : "mt-2"}`}
       aria-label="Publicidad"
     >
       <p
-        className={`text-[10px] text-zinc-500 text-center ${
-          isPwa ? "mb-1" : "mb-2"
+        className={`text-[9px] text-zinc-500 text-center ${
+          isPwa ? "mb-0" : "mb-2"
         }`}
       >
         PUBLICIDAD
       </p>
 
       <div
-        className={`w-full rounded-xl border border-dashed border-white/20 bg-white/[0.03] flex flex-col items-center justify-center ${
-          isPwa ? "min-h-[42px] py-1" : "min-h-[90px]"
+        className={`w-full rounded-lg border border-dashed border-white/20 bg-white/[0.03] flex items-center justify-center ${
+          isPwa ? "h-[24px]" : "min-h-[90px] flex-col"
         }`}
       >
-        <p className="text-xs font-bold text-zinc-300">
-          ESPACIO RESERVADO
+        <p className="text-[10px] font-bold text-zinc-400">
+          {isPwa ? "PUBLICIDAD" : "ESPACIO RESERVADO"}
         </p>
+
         {!isPwa && (
           <p className="text-xs text-zinc-500">
             Aquí aparecerá tu anuncio
