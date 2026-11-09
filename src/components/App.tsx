@@ -391,11 +391,30 @@ export default function App() {
   const addFine = () => run(async () => {
     const target = members.find(m => m.uid === fineTarget);
     if (!target) throw new Error("Selecciona a quién sancionar.");
+
     const amount = fineType === "money" ? Number(fineAmount) : undefined;
-    if (fineType === "money" && (!amount || amount <= 0)) throw new Error("Introduce una cantidad válida.");
-    if (!fineDescription.trim()) throw new Error("Describe la multa o el reto.");
-    await addPenalty(active, { targetUid: target.uid, targetName: target.name, type: fineType, amount, description: fineDescription.trim(), createdBy: uid });
-    setModal(null); setFineTarget(""); setFineDescription("Invita a un café");
+
+    if (fineType === "money" && (!amount || amount <= 0)) {
+      throw new Error("Introduce una cantidad válida.");
+    }
+
+    if (!fineDescription.trim()) {
+      throw new Error("Describe la multa o el reto.");
+    }
+
+    await addPenalty(active, {
+      targetUid: target.uid,
+      targetName: target.name,
+      type: fineType,
+      description: fineDescription.trim(),
+      createdBy: uid,
+      ...(fineType === "money" ? { amount } : {})
+    });
+
+    setModal(null);
+    setFineTarget("");
+    setFineDescription("Invita a un café");
+    setFineType("money");
   });
   const copyCode = async () => { await navigator.clipboard.writeText(active); setNotice("Código copiado. ¡Compártelo!"); };
   const allGroups = useMemo(() => {
@@ -623,21 +642,15 @@ export default function App() {
           <div className="glass rounded-2xl p-4 mb-6"><div className="flex justify-between"><div><p className="text-xs text-zinc-500">Código para invitar</p><p className="text-2xl font-black tracking-[.2em] mt-1">{group.id}</p></div><button onClick={copyCode} className="self-center bg-white/10 p-3 rounded-xl"><Copy size={17} /></button></div><p className="text-xs text-zinc-500 mt-3">Comparte el código y la otra persona podrá unirse desde su móvil.</p></div>
           <h3 className="font-bold mb-3">Participantes ({members.length})</h3>
           {members.map(m => <div key={m.uid} className="glass rounded-xl p-3 mb-2 flex items-center gap-3"><div className="w-10 h-10 rounded-full bg-lime-300/15 text-lime-300 grid place-items-center font-bold">{m.name.slice(0, 1).toUpperCase()}</div><span className="flex-1 font-medium">{m.name}{m.uid === group.ownerId && <Crown size={12} className="inline ml-2 text-amber-300" />}</span>{m.uid !== group.ownerId && <button onClick={() => run(() => removeMember(active, m.uid))} className="text-zinc-600 p-2"><Trash2 size={16} /></button>}</div>)}
-          <div className="flex justify-between items-center mt-8 mb-3">
-            <h3 className="font-bold">Tareas del grupo ({tasks.length})</h3>
-
-            <button
-              onClick={() => setModal("task")}
-              className="text-lime-300 text-sm font-semibold"
-            >
-              <Plus size={15} className="inline" /> Añadir
-            </button>
+          <div className="mt-8 mb-3">
+            <h3 className="text-xl font-black">El deber te llama</h3>
+            <p className="text-xs text-zinc-500 mt-1">No te hagas el sordo</p>
           </div>
 
           {tasks.length === 0 ? (
             <div className="glass rounded-xl p-4">
               <p className="text-sm text-zinc-400">
-                Este grupo todavía no tiene tareas. Puedes añadirlas manualmente o utilizar las tareas predeterminadas.
+                ¿Descansar? Aquí hemos venido a sufrir
               </p>
 
               {group?.defaultTasksAdded !== true && (
@@ -668,28 +681,188 @@ export default function App() {
                   </button>
                 </div>
               ))}
-
-              {!DEFAULT_TASKS.some(defaultTask =>
-                tasks.some(task => task.title === defaultTask)
-              ) && (
-                  <button
-                    onClick={addDefaultTasks}
-                    disabled={busy}
-                    className="text-lime-300 text-sm mt-3 font-semibold"
-                  >
-                    + Añadir también las tareas predeterminadas
-                  </button>
-                )}
             </>
           )}
+
+          <button
+            onClick={() => setModal("task")}
+            className="mt-3 w-full rounded-xl bg-lime-300/10 border border-lime-300/20 p-3 text-sm font-bold text-lime-300"
+          >
+            <Plus size={15} className="inline mr-1" />
+            Añadir más sufrimiento
+          </button>
         </section>}
+
         {tab === "ranking" && <section>
-          <div className="text-center py-6"><div className="w-16 h-16 rounded-2xl bg-rose-400/10 text-rose-300 grid place-items-center mx-auto"><Trophy size={30} /></div><p className="text-xs uppercase tracking-widest text-zinc-500 mt-4">Hall of Shame</p><h2 className="text-3xl font-black mt-1">Los más <span className="text-rose-300">escaqueados</span></h2><p className="text-sm text-zinc-500 mt-2">Ranking de multas registradas durante el mes actual.</p></div>
-          {sorted.map((m, i) => <div key={m.uid} className={cx("glass rounded-2xl p-4 mb-3 flex items-center gap-3", i === 0 && m.count > 0 && "border-rose-300/30")}><div className="text-xl w-8 text-center">{i === 0 ? "🥇" : i === 1 ? "🥈" : i === 2 ? "🥉" : `${i + 1}.`}</div><div className="flex-1"><p className="font-bold">{m.name}</p><p className="text-xs text-zinc-500">{m.count} escaqueos/multas · {m.euros.toFixed(2)} €</p></div><span className="text-rose-300 font-black text-xl">{m.count}</span></div>)}
-          {sorted.length === 0 && <p className="text-center text-zinc-500 text-sm">Todavía no hay datos.</p>}
-          <button onClick={() => { setFineTarget(""); setModal("fine"); }} disabled={!members.length} className="mt-4 w-full glass rounded-xl py-4 font-bold flex justify-center gap-2 items-center"><Gavel size={17} /> Registrar escaqueo / multa</button>
-          <div className="mt-7"><h3 className="font-bold mb-3">Historial de multas</h3>{penalties.slice(0, 12).map(p => <div key={p.id} className="glass rounded-xl p-3 mb-2 flex items-center gap-3"><div className="rounded-lg bg-rose-300/10 text-rose-300 p-2">{p.type === "money" ? <Wallet size={17} /> : <ShieldAlert size={17} />}</div><div className="flex-1 min-w-0"><p className="text-sm font-semibold">{p.targetName}</p><p className="text-xs text-zinc-500 truncate">{p.description}</p></div><span className="text-sm font-bold">{p.type === "money" ? `${(p.amount || 0).toFixed(2)} €` : "Reto"}</span></div>)}</div>
+          {/* Cabecera */}
+          <div className="text-center py-6">
+            <div className="w-20 h-20 rounded-3xl bg-rose-400/10 border border-rose-300/20 text-rose-300 grid place-items-center mx-auto">
+              <Trophy size={38} />
+            </div>
+
+            <p className="text-xs uppercase tracking-widest text-zinc-500 mt-4">
+              Hall of Shame
+            </p>
+
+            <h2 className="text-3xl font-black mt-1">
+              Los más <span className="text-rose-300">escaqueados</span>
+            </h2>
+
+            <p className="text-sm text-zinc-500 mt-2">
+              Aquí la fama cuesta dinero... o trabajo.
+            </p>
+          </div>
+
+          {/* Ranking */}
+          {sorted.some(m => m.count > 0) ? (
+            <>
+              {/* Líder */}
+              {sorted.filter(m => m.count > 0).slice(0, 1).map(m => (
+                <div
+                  key={m.uid}
+                  className="relative overflow-hidden rounded-3xl border border-rose-300/30 bg-gradient-to-br from-rose-400/15 to-purple-500/5 p-6 mb-4 text-center"
+                >
+                  <div className="absolute -top-12 -right-12 w-36 h-36 bg-rose-400/10 blur-3xl rounded-full" />
+
+                  <div className="relative">
+                    <div className="text-5xl mb-3">👑</div>
+
+                    <p className="text-xs uppercase tracking-widest text-rose-300 font-bold">
+                      El rey del escaqueo
+                    </p>
+
+                    <h3 className="text-2xl font-black mt-2">
+                      {m.name}
+                    </h3>
+
+                    <p className="text-sm text-zinc-400 mt-2">
+                      {m.count >= 5
+                        ? "Lo tuyo ya no es mala suerte. Es un estilo de vida."
+                        : m.count >= 3
+                          ? "Estás haciendo méritos para no tocar un solo plato."
+                          : "Has empezado fuerte. Tus compañeros no olvidan."}
+                    </p>
+
+                    <div className="mt-5 inline-flex items-center gap-3 rounded-2xl bg-black/20 px-5 py-3">
+                      <div>
+                        <p className="text-3xl font-black text-rose-300">
+                          {m.count}
+                        </p>
+                        <p className="text-[10px] uppercase tracking-wider text-zinc-500">
+                          Multas
+                        </p>
+                      </div>
+
+                      <div className="w-px h-10 bg-white/10" />
+
+                      <div>
+                        <p className="text-2xl font-black text-white">
+                          {m.euros.toFixed(2)} €
+                        </p>
+                        <p className="text-[10px] uppercase tracking-wider text-zinc-500">
+                          En multas
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              ))}
+
+              {/* Resto del ranking */}
+              <h3 className="font-bold mb-3">El resto de sospechosos</h3>
+
+              {sorted.filter(m => m.count > 0).slice(1).map((m, i) => (
+                <div
+                  key={m.uid}
+                  className="glass rounded-2xl p-4 mb-3 flex items-center gap-3"
+                >
+                  <div className="text-xl w-8 text-center">
+                    {i + 2 === 2 ? "🥈" : i + 2 === 3 ? "🥉" : `${i + 2}.`}
+                  </div>
+
+                  <div className="flex-1 min-w-0">
+                    <p className="font-bold">{m.name}</p>
+                    <p className="text-xs text-zinc-500">
+                      {m.count} multas · {m.euros.toFixed(2)} €
+                    </p>
+                  </div>
+
+                  <span className="text-rose-300 font-black text-xl">
+                    {m.count}
+                  </span>
+                </div>
+              ))}
+            </>
+          ) : (
+            <div className="glass rounded-3xl p-6 text-center">
+              <div className="text-5xl mb-4">😇</div>
+
+              <h3 className="text-lg font-black">
+                ¡Qué grupo de santos!
+              </h3>
+
+              <p className="text-sm text-zinc-400 mt-2">
+                Todavía no hay multas. No sabemos cuánto durará esta falsa paz...
+              </p>
+            </div>
+          )}
+
+          {/* Registrar multa */}
+          <button
+            onClick={() => {
+              setFineTarget("");
+              setModal("fine");
+            }}
+            disabled={!members.length}
+            className="mt-5 w-full rounded-xl bg-rose-400/10 border border-rose-300/20 text-rose-200 py-4 font-bold flex justify-center gap-2 items-center disabled:opacity-40"
+          >
+            <Gavel size={17} />
+            Registrar escaqueo / multa
+          </button>
+
+          {/* Historial */}
+          <div className="mt-8">
+            <div className="flex justify-between items-center mb-3">
+              <h3 className="font-bold">Historial de multas</h3>
+              <span className="text-xs text-zinc-500">
+                {penalties.length} registros
+              </span>
+            </div>
+
+            {penalties.slice(0, 12).map(p => (
+              <div
+                key={p.id}
+                className="glass rounded-xl p-3 mb-2 flex items-center gap-3"
+              >
+                <div className="rounded-lg bg-rose-300/10 text-rose-300 p-2">
+                  {p.type === "money"
+                    ? <Wallet size={17} />
+                    : <ShieldAlert size={17} />}
+                </div>
+
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-semibold">{p.targetName}</p>
+                  <p className="text-xs text-zinc-500 truncate">
+                    {p.description}
+                  </p>
+                </div>
+
+                <span className="text-sm font-bold">
+                  {p.type === "money"
+                    ? `${(p.amount || 0).toFixed(2)} €`
+                    : "Reto"}
+                </span>
+              </div>
+            ))}
+
+            {penalties.length === 0 && (
+              <p className="text-sm text-zinc-500 text-center py-4">
+                El historial está limpio... por ahora.
+              </p>
+            )}
+          </div>
         </section>}
+
       </>}
     </div>
 
