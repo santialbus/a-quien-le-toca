@@ -7,7 +7,10 @@ export const metadata: Metadata = {
   description: "Sortea tareas, reparte favores y lleva la cuenta de los escaqueos.",
   applicationName: "¿A quién le toca?",
   appleWebApp: { capable: true, statusBarStyle: "black-translucent", title: "¿A quién le toca?" },
-  manifest: "/manifest.webmanifest"
+  manifest: "/manifest.webmanifest",
+  icons: {
+    icon: "/icon.svg",
+  }
 };
 export const viewport: Viewport = {
   themeColor: "#090b12",
