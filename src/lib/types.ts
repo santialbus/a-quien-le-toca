@@ -12,3 +12,14 @@ export type Group = {
   createdAt?: unknown;
   defaultTasksAdded?: boolean;
 };
+export type RouletteState = {
+  status: "spinning" | "finished";
+  spinId: string;
+  startedAt?: unknown;
+  durationMs: number;
+  winnerUid: string;
+  winnerName: string;
+  taskTitle: string;
+  createdBy: string;
+  drawId: string;
+};

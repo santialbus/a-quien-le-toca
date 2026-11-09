@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { onAuthStateChanged, signInAnonymously } from "firebase/auth";
 import { AlertCircle, ArrowLeft, Check, ChevronDown, CirclePlus, Copy, Crown, Gavel, Home, LoaderCircle, Plus, RotateCw, Settings, ShieldAlert, Sparkles, Trash2, Trophy, Users, Volume2, Wallet, X } from "lucide-react";
 import { auth, firebaseConfigured } from "@/lib/firebase";
@@ -16,15 +16,17 @@ import {
   listenMembers,
   listenPenalties,
   listenTasks,
+  listenRoulette,
+  startRoulette,
+  finishRoulette,
   removeMember,
   removeTask,
-  saveDraw,
   updateDrawTask,
   addDefaultTasksToGroup,
 } from "@/lib/store";
 import { buzz, fanfare, tick } from "@/lib/audio";
 
-import type { Draw, Group, Member, Penalty, Task } from "@/lib/types";
+import type { Draw, Group, Member, Penalty, Task, RouletteState } from "@/lib/types";
 import AdBanner from "@/components/AdBanner";
 
 const DEFAULT_TASKS = [
@@ -57,6 +59,13 @@ export default function App() {
   const [activeGroupData, setActiveGroupData] = useState<Group | null>(null);
   const [joinedGroups, setJoinedGroups] = useState<Group[]>([]);
   const [defaultTasksAdded, setDefaultTasksAdded] = useState(false);
+  const [rouletteState, setRouletteState] = useState<RouletteState | null>(null);
+  const [spinDuration, setSpinDuration] = useState(3400);
+  const [winnerModalOpen, setWinnerModalOpen] = useState(false);
+
+  const lastAnimatedSpin = useRef("");
+  const lastCelebratedSpin = useRef("");
+  const initialFinishedSpin = useRef("");
 
   useEffect(() => {
     if (!uid || !firebaseConfigured) return;
@@ -128,13 +137,133 @@ export default function App() {
     else window.localStorage.removeItem("activeGroup");
   }, [active]);
   useEffect(() => {
-    if (!active) { setMembers([]); setTasks([]); setPenalties([]); setDraws([]); return; }
+    if (!active) {
+      setMembers([]);
+      setTasks([]);
+      setPenalties([]);
+      setDraws([]);
+      setRouletteState(null);
+      setSpinning(false);
+      setWinner(null);
+      return;
+    }
+
+    setRouletteState(null);
+
+    let firstRouletteSnapshot = true;
+
     const unsubs = [
-      listenMembers(active, setMembers), listenTasks(active, setTasks),
-      listenPenalties(active, setPenalties), listenDraws(active, setDraws)
+      listenMembers(active, setMembers),
+      listenTasks(active, setTasks),
+      listenPenalties(active, setPenalties),
+      listenDraws(active, setDraws),
+      listenRoulette(active, state => {
+        if (firstRouletteSnapshot) {
+          firstRouletteSnapshot = false;
+
+          initialFinishedSpin.current =
+            state?.status === "finished" ? state.spinId : "";
+        }
+
+        setRouletteState(state);
+      }),
     ];
+
     return () => unsubs.forEach(fn => fn());
   }, [active]);
+
+  useEffect(() => {
+    if (!rouletteState || !active) return;
+
+    if (rouletteState.status === "spinning") {
+      setWinnerModalOpen(false);
+      // Evita iniciar dos veces la animación del mismo sorteo.
+      if (lastAnimatedSpin.current === rouletteState.spinId) return;
+
+      lastAnimatedSpin.current = rouletteState.spinId;
+
+      const startedAt = rouletteState.startedAt as
+        | { toMillis?: () => number }
+        | undefined;
+
+      const elapsed = startedAt?.toMillis
+        ? Math.max(0, Date.now() - startedAt.toMillis())
+        : 0;
+
+      const remaining = Math.max(
+        0,
+        rouletteState.durationMs - elapsed
+      );
+
+      setWinner(null);
+      setSpinning(true);
+      setSpinDuration(Math.max(remaining, 1));
+
+      // Todos los dispositivos utilizan el mismo incremento.
+      const extra =
+        1440 +
+        [...rouletteState.spinId].reduce(
+          (sum, char) => sum + char.charCodeAt(0),
+          0
+        ) % 1080;
+
+      setRotation(r => r + extra);
+
+      buzz(25);
+
+      const interval = window.setInterval(() => {
+        tick();
+      }, 110);
+
+      const timeout = window.setTimeout(() => {
+        window.clearInterval(interval);
+
+        finishRoulette(active, rouletteState.spinId).catch(error => {
+          console.trace("TRAZA DEL ERROR");
+          console.error("ERROR COMPLETO:", error);
+          console.error("ERROR STRING:", String(error));
+          console.error(
+            "ERROR JSON:",
+            JSON.stringify(error, Object.getOwnPropertyNames(error))
+          );
+        });
+      }, remaining);
+
+      return () => {
+        window.clearInterval(interval);
+        window.clearTimeout(timeout);
+      };
+    }
+
+    // El sorteo ha terminado: todos muestran el mismo resultado.
+    setSpinning(false);
+
+    setWinner({
+      uid: rouletteState.winnerUid,
+      name: rouletteState.winnerName,
+    } as Member);
+
+    setWinnerTask(rouletteState.taskTitle);
+
+    if (initialFinishedSpin.current === rouletteState.spinId) {
+      // Es el último resultado guardado, no un sorteo nuevo.
+      initialFinishedSpin.current = "";
+      setWinnerModalOpen(false);
+    } else {
+      // Es un sorteo que acaba de terminar.
+      setWinnerModalOpen(true);
+    }
+
+    // Solo reproduce la celebración si este dispositivo vio el giro.
+    if (
+      lastAnimatedSpin.current === rouletteState.spinId &&
+      lastCelebratedSpin.current !== rouletteState.spinId
+    ) {
+      lastCelebratedSpin.current = rouletteState.spinId;
+      fanfare();
+      buzz([40, 35, 80]);
+    }
+  }, [rouletteState, active]);
 
   useEffect(() => {
     if (tasks.length === 0) {
@@ -200,43 +329,22 @@ export default function App() {
     setPersonName("");
     setTab("ruleta");
   });
+  
   const spin = async () => {
     if (spinning || members.length < 1 || !selectedTask || !group) return;
 
-    setWinner(null);
-    setSpinning(true);
-    buzz(25);
-
     const chosen = members[Math.floor(Math.random() * members.length)];
-    const extra = 1440 + Math.random() * 1080;
 
-    setRotation(r => r + extra);
-
-    let count = 0;
-    const interval = window.setInterval(() => {
-      tick();
-      count++;
-    }, 110);
-
-    window.setTimeout(async () => {
-      window.clearInterval(interval);
-      setSpinning(false);
-      setWinner(chosen);
-      setWinnerTask(selectedTask);
-
-      fanfare();
-      buzz([40, 35, 80]);
-
-      await run(async () => {
-        await saveDraw(active, {
-          winnerUid: chosen.uid,
-          winnerName: chosen.name,
-          taskTitle: selectedTask,
-          createdBy: uid
-        });
+    await run(async () => {
+      await startRoulette(active, {
+        winnerUid: chosen.uid,
+        winnerName: chosen.name,
+        taskTitle: selectedTask,
+        createdBy: uid,
       });
-    }, 3400);
+    });
   };
+
   const addFine = () => run(async () => {
     const target = members.find(m => m.uid === fineTarget);
     if (!target) throw new Error("Selecciona a quién sancionar.");
@@ -285,7 +393,7 @@ export default function App() {
       {!group ? <div className="pt-10">
         <div className="text-center mb-8"><div className="mx-auto w-24 h-24 rounded-[2rem] bg-lime-300/10 border border-lime-300/20 grid place-items-center mb-5"><Sparkles size={42} className="text-lime-300" /></div><h1 className="text-3xl font-black tracking-tight">Que decida <span className="text-lime-300">la suerte.</span></h1><p className="text-zinc-400 mt-3 text-sm leading-6">Reparte tareas, evita discusiones y descubre quién se escaquea más.</p></div>
         <div className="grid grid-cols-2 gap-3"><button onClick={() => setModal("create")} className="rounded-2xl bg-lime-300 text-black p-5 text-left font-bold"><CirclePlus /><span className="block mt-4">Crear grupo</span><span className="text-xs font-normal opacity-70">Empieza desde cero</span></button><button onClick={() => setModal("join")} className="glass rounded-2xl p-5 text-left font-bold"><Users className="text-lime-300" /><span className="block mt-4">Unirme</span><span className="text-xs text-zinc-500 font-normal">Tengo un código</span></button></div>
-        
+
         {allGroups.length > 0 && (
           <div className="mt-8">
             <p className="text-xs uppercase tracking-widest text-zinc-500 mb-3">
@@ -316,7 +424,10 @@ export default function App() {
             <div className="absolute top-0 left-1/2 -translate-x-1/2 -translate-y-1/2 w-44 h-44 bg-lime-300/10 blur-3xl rounded-full" />
             <div className="relative mx-auto w-64 h-64 sm:w-72 sm:h-72">
               <div className="absolute z-10 top-0 left-1/2 -translate-x-1/2 -translate-y-1"><div className="w-0 h-0 border-l-[13px] border-r-[13px] border-t-[24px] border-l-transparent border-r-transparent border-t-lime-300 drop-shadow-lg" /></div>
-              <div className={cx("absolute inset-2 rounded-full border-[10px] border-[#292f3c] bg-[conic-gradient(from_0deg,#a3e635_0deg_60deg,#252c38_60deg_120deg,#a3e635_120deg_180deg,#252c38_180deg_240deg,#a3e635_240deg_300deg,#252c38_300deg_360deg)] transition-transform duration-[3400ms] ease-[cubic-bezier(.12,.75,.12,1)] grid place-items-center", spinning && "brightness-125")} style={{ transform: `rotate(${rotation}deg)` }}>
+              <div className={cx("absolute inset-2 rounded-full border-[10px] border-[#292f3c] bg-[conic-gradient(from_0deg,#a3e635_0deg_60deg,#252c38_60deg_120deg,#a3e635_120deg_180deg,#252c38_180deg_240deg,#a3e635_240deg_300deg,#252c38_300deg_360deg)] transition-transform duration-[3400ms] ease-[cubic-bezier(.12,.75,.12,1)] grid place-items-center", spinning && "brightness-125")} style={{
+                transform: `rotate(${rotation}deg)`,
+                transitionDuration: `${spinDuration}ms`,
+              }}>
                 <div className="w-24 h-24 rounded-full bg-[#111520] border border-white/10 shadow-2xl grid place-items-center"><span className="text-3xl">🎯</span></div>
               </div>
               <div className="absolute inset-0 rounded-full border border-white/10 pointer-events-none" />
@@ -372,41 +483,65 @@ export default function App() {
               </p>
             </div>
           </div>
-          {winner && (
-            <div className="mt-4 rounded-3xl border border-lime-300/30 bg-lime-300/10 p-5 text-center animate-in">
-              <div className="text-4xl mb-2">🏆</div>
-
-              <p className="text-xs uppercase tracking-widest text-lime-300">
-                La suerte ha hablado
-              </p>
-
-              <h2 className="text-3xl font-black mt-2">
-                {winner.name}
-              </h2>
-
-              <p className="text-zinc-400 text-sm mt-4 mb-2">
-                ¿Qué tarea le toca?
-              </p>
-
-              <p className="text-zinc-400 text-sm mt-4">
-                La tarea que le toca es:
-              </p>
-
-              <p className="text-xl font-bold mt-2">
-                {winnerTask}
-              </p>
-
-              <button
-                onClick={() => {
-                  setFineTarget(winner.uid);
-                  setModal("fine");
-                }}
-                className="mt-4 rounded-xl bg-white/10 px-4 py-3 text-sm font-semibold"
+          
+          {winner && winnerModalOpen && (
+            <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 backdrop-blur-sm p-4">
+              <div
+                role="dialog"
+                aria-modal="true"
+                aria-labelledby="winner-title"
+                className="relative w-full max-w-md rounded-3xl border border-lime-300/30 bg-zinc-900 p-6 text-center shadow-2xl animate-in"
               >
-                ¿Se ha escaqueado? Poner multa
-              </button>
+                {/* Botón cerrar */}
+                <button
+                  onClick={() => setWinnerModalOpen(false)}
+                  aria-label="Cerrar resultado"
+                  className="absolute right-4 top-4 flex h-9 w-9 items-center justify-center rounded-full bg-white/10 text-zinc-300 hover:bg-white/20 hover:text-white transition"
+                >
+                  ✕
+                </button>
+
+                <div className="mb-3 text-5xl">🏆</div>
+
+                <p className="text-xs uppercase tracking-widest text-lime-300">
+                  La suerte ha hablado
+                </p>
+
+                <h2
+                  id="winner-title"
+                  className="mt-3 text-3xl font-black text-white"
+                >
+                  {winner.name}
+                </h2>
+
+                <p className="mt-5 text-sm text-zinc-400">
+                  ¿Qué tarea le toca?
+                </p>
+
+                <div className="mt-3 rounded-2xl border border-lime-300/20 bg-lime-300/10 p-5">
+                  <p className="text-xl font-bold text-lime-300">
+                    {winnerTask}
+                  </p>
+                </div>
+
+                <button
+                  onClick={() => {
+                    setWinnerModalOpen(false);
+                    setFineTarget(winner.uid);
+                    setModal("fine");
+                  }}
+                  className="mt-5 w-full rounded-xl bg-white/10 px-4 py-3 text-sm font-semibold text-white transition hover:bg-white/20"
+                >
+                  ¿Se ha escaqueado? Poner multa
+                </button>
+
+                <p className="mt-4 text-xs text-zinc-500">
+                  El destino está echado 🎲
+                </p>
+              </div>
             </div>
           )}
+
           {members.length === 0 && <p className="text-center text-sm text-zinc-500 mt-5">Añade participantes en la pestaña Grupo para empezar.</p>}
           <div className="mt-6"><div className="flex justify-between mb-3"><h3 className="font-bold">Últimos sorteos</h3><span className="text-xs text-zinc-500">{draws.length} registros</span></div>{draws.slice(0, 4).map(d => <div key={d.id} className="glass rounded-xl p-3 mb-2 flex justify-between text-sm"><span>{d.winnerName} <span className="text-zinc-500">· {d.taskTitle}</span></span><Check size={16} className="text-lime-300" /></div>)}</div>
         </section>}
@@ -485,13 +620,13 @@ export default function App() {
       </>}
     </div>
 
-      {!group && (
-        <div className="fixed bottom-0 inset-x-0 z-40 px-5 pt-3 pb-[max(12px,env(safe-area-inset-bottom))] bg-[#0c0f18]/95 backdrop-blur-xl border-t border-white/10">
-          <div className="max-w-xl mx-auto">
-            <AdBanner />
-          </div>
+    {!group && (
+      <div className="fixed bottom-0 inset-x-0 z-40 px-5 pt-3 pb-[max(12px,env(safe-area-inset-bottom))] bg-[#0c0f18]/95 backdrop-blur-xl border-t border-white/10">
+        <div className="max-w-xl mx-auto">
+          <AdBanner />
         </div>
-      )}
+      </div>
+    )}
     {group && <nav className="fixed bottom-0 inset-x-0 z-30 safe-bottom pt-3 bg-[#0c0f18]/95 backdrop-blur-xl border-t border-white/10"><div className="max-w-xl mx-auto grid grid-cols-3 px-5"><NavButton active={tab === "ruleta"} onClick={() => setTab("ruleta")} icon={<RotateCw size={20} />} label="Ruleta" /><NavButton active={tab === "grupo"} onClick={() => setTab("grupo")} icon={<Users size={20} />} label="Grupo" /><NavButton active={tab === "ranking"} onClick={() => setTab("ranking")} icon={<Trophy size={20} />} label="Ranking" /></div></nav>}
     {modal && <Modal title={modal === "create" ? "Crear grupo" : modal === "join" ? "Unirme a un grupo" : modal === "member" ? "Añadir participante" : modal === "task" ? "Nueva tarea" : "Registrar multa"} close={() => setModal(null)}>
       {(modal === "create" || modal === "join") && <>{modal === "create" && <Field label="Nombre del grupo" value={groupName} set={setGroupName} placeholder="Piso estudiantes" />}{modal === "join" && <Field label="Código del grupo" value={joinCode} set={setJoinCode} placeholder="ABC123" />}<Field label="Tu nombre" value={personName} set={setPersonName} placeholder="¿Cómo te llamas?" /><Action onClick={modal === "create" ? create : join} disabled={busy}>{busy ? "Un momento…" : modal === "create" ? "Crear grupo" : "Entrar en el grupo"}</Action></>}

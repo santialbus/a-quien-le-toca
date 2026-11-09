@@ -15,7 +15,7 @@ import {
   where
 } from "firebase/firestore";
 import { db } from "./firebase";
-import type { Draw, Group, Member, Penalty, Task } from "./types";
+import type { Draw, Group, Member, Penalty, Task, RouletteState } from "./types";
 
 function database() {
   if (!db) throw new Error("Firebase no está configurado. Añade las variables NEXT_PUBLIC_FIREBASE_*.");
@@ -175,6 +175,140 @@ export async function addDefaultTasksToGroup(
 
     transaction.update(groupRef, {
       defaultTasksAdded: true
+    });
+  });
+}
+
+
+export function listenRoulette(
+  groupId: string,
+  callback: (state: RouletteState | null) => void
+) {
+  return onSnapshot(
+    doc(database(), "groups", groupId, "roulette", "current"),
+    snapshot => {
+      callback(
+        snapshot.exists()
+          ? snapshot.data() as RouletteState
+          : null
+      );
+    }
+  );
+}
+
+export async function startRoulette(
+  groupId: string,
+  draw: Omit<Draw, "id" | "createdAt">
+) {
+  const dbInstance = database();
+
+  const rouletteRef = doc(
+    dbInstance,
+    "groups",
+    groupId,
+    "roulette",
+    "current"
+  );
+
+  const drawRef = doc(col(groupId, "draws"));
+
+  await runTransaction(dbInstance, async transaction => {
+    const snapshot = await transaction.get(rouletteRef);
+
+    if (snapshot.exists()) {
+      const current = snapshot.data() as RouletteState;
+
+      if (current.status === "spinning") {
+        const startedAt = current.startedAt as
+          | { toMillis?: () => number }
+          | undefined;
+
+        const elapsed = startedAt?.toMillis
+          ? Date.now() - startedAt.toMillis()
+          : 0;
+
+        if (elapsed < current.durationMs + 1000) {
+          throw new Error("Ya hay un sorteo en marcha.");
+        }
+
+        // Si un sorteo anterior quedó interrumpido,
+        // guardamos igualmente su resultado.
+        transaction.set(
+          doc(dbInstance, "groups", groupId, "draws", current.drawId),
+          {
+            winnerUid: current.winnerUid,
+            winnerName: current.winnerName,
+            taskTitle: current.taskTitle,
+            createdBy: current.createdBy,
+            createdAt: serverTimestamp()
+          }
+        );
+      }
+    }
+
+    transaction.set(rouletteRef, {
+      status: "spinning",
+      spinId: Array.from(
+        crypto.getRandomValues(new Uint8Array(16)),
+        byte => byte.toString(16).padStart(2, "0")
+      ).join(""),
+      startedAt: serverTimestamp(),
+      durationMs: 3400,
+      winnerUid: draw.winnerUid,
+      winnerName: draw.winnerName,
+      taskTitle: draw.taskTitle,
+      createdBy: draw.createdBy,
+      drawId: drawRef.id
+    });
+  });
+}
+
+export async function finishRoulette(
+  groupId: string,
+  spinId: string
+) {
+  console.log("[finishRoulette] Intentando finalizar:", {
+    groupId,
+    spinId
+  });
+  const dbInstance = database();
+
+  const rouletteRef = doc(
+    dbInstance,
+    "groups",
+    groupId,
+    "roulette",
+    "current"
+  );
+
+  await runTransaction(dbInstance, async transaction => {
+    const snapshot = await transaction.get(rouletteRef);
+
+    if (!snapshot.exists()) return;
+
+    const current = snapshot.data() as RouletteState;
+
+    if (
+      current.status !== "spinning" ||
+      current.spinId !== spinId
+    ) {
+      return;
+    }
+
+    transaction.set(
+      doc(dbInstance, "groups", groupId, "draws", current.drawId),
+      {
+        winnerUid: current.winnerUid,
+        winnerName: current.winnerName,
+        taskTitle: current.taskTitle,
+        createdBy: current.createdBy,
+        createdAt: serverTimestamp()
+      }
+    );
+
+    transaction.update(rouletteRef, {
+      status: "finished",
+      finishedAt: serverTimestamp()
     });
   });
 }
