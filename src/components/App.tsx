@@ -29,6 +29,49 @@ import { buzz, fanfare, tick } from "@/lib/audio";
 import type { Draw, Group, Member, Penalty, Task, RouletteState } from "@/lib/types";
 import AdBanner from "@/components/AdBanner";
 
+const LOSER_PHRASES = [
+  "Enhorabuena... te ha tocado sufrir.",
+  "Hoy los astros están en tu contra.",
+  "Alguien tenía que hacerlo. Y te ha tocado a ti.",
+  "La suerte es una traidora.",
+  "No corras, sabemos que estás ahí.",
+  "El universo acaba de asignarte trabajo.",
+  "Se busca voluntario... ¡demasiado tarde!",
+  "Tus compañeros te agradecen el sacrificio.",
+  "Hoy no libras, campeón.",
+  "La ruleta no tiene corazón.",
+  "Tu destino estaba escrito. Y era fregar.",
+  "Sonríe, podría haberle tocado a otro.",
+  "No es mala suerte, es organización doméstica.",
+  "Hoy te ha tocado ser una persona responsable.",
+  "El karma tiene una lista y estás en ella.",
+  "¡Premio! Una tarea para ti.",
+  "No hay escapatoria. La ruleta ha hablado.",
+  "Tus vacaciones de las tareas han terminado.",
+  "Alguien tiene que mantener esto en orden.",
+  "Qué bonito es compartir... las tareas.",
+  "La vida te da sorpresas. Esta no es buena.",
+  "Hoy eres el héroe que nadie pidió.",
+  "Un aplauso para el nuevo esclavo del hogar.",
+  "La suerte ha decidido tomarse el día libre contigo.",
+  "No llores, solo es una tarea... o eso dicen.",
+  "Tu equipo cree en ti. Nosotros no tanto.",
+  "El descanso puede esperar. La tarea no.",
+  "Has sido elegido. No puedes rechazar el destino.",
+  "¡Qué suerte la tuya! Bueno... no.",
+  "La gloria es temporal. La tarea es tuya."
+];
+
+function getLoserPhrase(spinId: string) {
+  let hash = 0;
+
+  for (let i = 0; i < spinId.length; i++) {
+    hash = (hash * 31 + spinId.charCodeAt(i)) >>> 0;
+  }
+
+  return LOSER_PHRASES[hash % LOSER_PHRASES.length];
+}
+
 const DEFAULT_TASKS = [
   "Bajar la basura",
   "Fregar los platos",
@@ -527,6 +570,12 @@ export default function App() {
 
                   <p className="text-xs uppercase tracking-widest text-lime-300">
                     La suerte ha hablado
+                  </p>
+
+                  <p className="mt-2 text-sm italic text-zinc-400">
+                    {rouletteState?.spinId
+                      ? getLoserPhrase(rouletteState.spinId)
+                      : "El destino está echado..."}
                   </p>
 
                   <h2
