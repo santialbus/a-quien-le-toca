@@ -329,7 +329,7 @@ export default function App() {
     setPersonName("");
     setTab("ruleta");
   });
-  
+
   const spin = async () => {
     if (spinning || members.length < 1 || !selectedTask || !group) return;
 
@@ -483,64 +483,88 @@ export default function App() {
               </p>
             </div>
           </div>
-          
+
+
           {winner && winnerModalOpen && (
-            <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 backdrop-blur-sm p-4">
-              <div
-                role="dialog"
-                aria-modal="true"
-                aria-labelledby="winner-title"
-                className="relative w-full max-w-md rounded-3xl border border-lime-300/30 bg-zinc-900 p-6 text-center shadow-2xl animate-in"
-              >
-                {/* Botón cerrar */}
-                <button
-                  onClick={() => setWinnerModalOpen(false)}
-                  aria-label="Cerrar resultado"
-                  className="absolute right-4 top-4 flex h-9 w-9 items-center justify-center rounded-full bg-white/10 text-zinc-300 hover:bg-white/20 hover:text-white transition"
+            <>
+              {/* Confeti por toda la pantalla */}
+              <div className="pointer-events-none fixed inset-0 z-50 overflow-hidden">
+                {Array.from({ length: 55 }).map((_, i) => (
+                  <span
+                    key={i}
+                    className="confetti-piece"
+                    style={{
+                      left: `${(i * 37) % 100}%`,
+                      animationDelay: `${(i % 12) * 0.08}s`,
+                      animationDuration: `${2.2 + (i % 5) * 0.2}s`,
+                      ["--drift" as string]: `${(i % 2 === 0 ? 1 : -1) * (30 + (i % 6) * 15)}px`,
+                      ["--rotation" as string]: `${360 + (i % 4) * 180}deg`,
+                    } as React.CSSProperties}
+                  />
+                ))}
+              </div>
+
+              {/* Modal del ganador */}
+              <div className="fixed inset-0 z-[60] isolate flex items-center justify-center bg-black/75 backdrop-blur-sm p-4">
+                <div
+                  role="dialog"
+                  aria-modal="true"
+                  aria-labelledby="winner-title"
+                  className="relative z-[61] w-full max-w-md rounded-3xl border border-lime-300/30 bg-zinc-900 p-6 text-center shadow-2xl animate-in"
                 >
-                  ✕
-                </button>
+                  <button
+                    type="button"
+                    onClick={() => setWinnerModalOpen(false)}
+                    aria-label="Cerrar resultado"
+                    className="absolute right-3 top-3 z-[70] flex h-11 w-11 cursor-pointer items-center justify-center rounded-full bg-white/10 text-xl text-zinc-300 transition hover:bg-white/20 hover:text-white"
+                  >
+                    ✕
+                  </button>
 
-                <div className="mb-3 text-5xl">🏆</div>
+                  <div className="mb-3 text-5xl animate-winner-pop">
+                    🏆
+                  </div>
 
-                <p className="text-xs uppercase tracking-widest text-lime-300">
-                  La suerte ha hablado
-                </p>
+                  <p className="text-xs uppercase tracking-widest text-lime-300">
+                    La suerte ha hablado
+                  </p>
 
-                <h2
-                  id="winner-title"
-                  className="mt-3 text-3xl font-black text-white"
-                >
-                  {winner.name}
-                </h2>
+                  <h2
+                    id="winner-title"
+                    className="mt-3 text-3xl font-black text-white animate-winner-name"
+                  >
+                    {winner.name}
+                  </h2>
 
-                <p className="mt-5 text-sm text-zinc-400">
-                  ¿Qué tarea le toca?
-                </p>
+                  <p className="mt-5 text-sm text-zinc-400">
+                    ¿Qué tarea le toca?
+                  </p>
 
-                <div className="mt-3 rounded-2xl border border-lime-300/20 bg-lime-300/10 p-5">
-                  <p className="text-xl font-bold text-lime-300">
-                    {winnerTask}
+                  <div className="mt-3 rounded-2xl border border-lime-300/20 bg-lime-300/10 p-5 animate-winner-task">
+                    <p className="text-xl font-bold text-lime-300">
+                      {winnerTask}
+                    </p>
+                  </div>
+
+                  <button
+                    onClick={() => {
+                      setWinnerModalOpen(false);
+                      setFineTarget(winner.uid);
+                      setModal("fine");
+                    }}
+                    className="mt-5 w-full rounded-xl bg-white/10 px-4 py-3 text-sm font-semibold text-white transition hover:bg-white/20"
+                  >
+                    ¿Se ha escaqueado? Poner multa
+                  </button>
+
+                  <p className="mt-4 text-xs text-zinc-500">
+                    El destino está echado 🎲
                   </p>
                 </div>
-
-                <button
-                  onClick={() => {
-                    setWinnerModalOpen(false);
-                    setFineTarget(winner.uid);
-                    setModal("fine");
-                  }}
-                  className="mt-5 w-full rounded-xl bg-white/10 px-4 py-3 text-sm font-semibold text-white transition hover:bg-white/20"
-                >
-                  ¿Se ha escaqueado? Poner multa
-                </button>
-
-                <p className="mt-4 text-xs text-zinc-500">
-                  El destino está echado 🎲
-                </p>
               </div>
-            </div>
+            </>
           )}
+
 
           {members.length === 0 && <p className="text-center text-sm text-zinc-500 mt-5">Añade participantes en la pestaña Grupo para empezar.</p>}
           <div className="mt-6"><div className="flex justify-between mb-3"><h3 className="font-bold">Últimos sorteos</h3><span className="text-xs text-zinc-500">{draws.length} registros</span></div>{draws.slice(0, 4).map(d => <div key={d.id} className="glass rounded-xl p-3 mb-2 flex justify-between text-sm"><span>{d.winnerName} <span className="text-zinc-500">· {d.taskTitle}</span></span><Check size={16} className="text-lime-300" /></div>)}</div>
