@@ -1,7 +1,7 @@
 
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 
 declare global {
   interface Window {
@@ -47,19 +47,44 @@ declare global {
 */
 
 export default function AdBanner() {
+  const [isPwa, setIsPwa] = useState(false);
+
+  useEffect(() => {
+    const standalone =
+      window.matchMedia("(display-mode: standalone)").matches ||
+      (window.navigator as Navigator & { standalone?: boolean }).standalone === true;
+
+    setIsPwa(standalone);
+  }, []);
+
   return (
-    <aside className="w-full mt-2" aria-label="Publicidad">
-      <p className="text-[10px] text-zinc-500 text-center mb-2">
+    <aside
+      className={`w-full ${
+        isPwa ? "mt-1" : "mt-2"
+      }`}
+      aria-label="Publicidad"
+    >
+      <p
+        className={`text-[10px] text-zinc-500 text-center ${
+          isPwa ? "mb-1" : "mb-2"
+        }`}
+      >
         PUBLICIDAD
       </p>
 
-      <div className="w-full min-h-[90px] rounded-xl border border-dashed border-white/20 bg-white/[0.03] flex flex-col items-center justify-center">
-        <p className="text-sm font-bold text-zinc-300">
+      <div
+        className={`w-full rounded-xl border border-dashed border-white/20 bg-white/[0.03] flex flex-col items-center justify-center ${
+          isPwa ? "min-h-[42px] py-1" : "min-h-[90px]"
+        }`}
+      >
+        <p className="text-xs font-bold text-zinc-300">
           ESPACIO RESERVADO
         </p>
-        <p className="text-xs text-zinc-500">
-          Aquí aparecerá tu anuncio
-        </p>
+        {!isPwa && (
+          <p className="text-xs text-zinc-500">
+            Aquí aparecerá tu anuncio
+          </p>
+        )}
       </div>
     </aside>
   );
