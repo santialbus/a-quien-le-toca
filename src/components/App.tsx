@@ -823,8 +823,44 @@ export default function App() {
             </div>
           </div>
 
-          <div className="mt-6"><div className="flex justify-between mb-3"><h3 className="font-bold">Últimos sorteos</h3><span className="text-xs text-zinc-500">{draws.length} registros</span></div>{draws.slice(0, 4).map(d => <div key={d.id} className="glass rounded-xl p-3 mb-2 flex justify-between text-sm"><span>{d.winnerName} <span className="text-zinc-500">· {d.taskTitle}</span></span><Check size={16} className="text-lime-300" /></div>)}</div>
-        </section>}
+          {/* Historial de últimos sorteos */}
+          <details className="mt-6 glass rounded-2xl p-4 group">
+            <summary className="flex items-center justify-between cursor-pointer list-none">
+              <div>
+                <h3 className="font-bold">Últimos sorteos</h3>
+                <p className="text-xs text-zinc-500 mt-1">
+                  {Math.min(draws.length, 10)} de 10 resultados
+                </p>
+              </div>
+
+              <ChevronDown
+                size={18}
+                className="text-zinc-400 transition-transform group-open:rotate-180"
+              />
+            </summary>
+
+            <div className="mt-4 space-y-2">
+              {draws.slice(0, 10).map(d => (
+                <div
+                  key={d.id}
+                  className="rounded-xl bg-white/[0.03] border border-white/5 p-3 flex items-center justify-between text-sm"
+                >
+                  <span>
+                    <span className="font-semibold">{d.winnerName}</span>
+                    <span className="text-zinc-500"> · {d.taskTitle}</span>
+                  </span>
+
+                  <Check size={16} className="text-lime-300 shrink-0" />
+                </div>
+              ))}
+
+              {draws.length === 0 && (
+                <p className="text-sm text-zinc-500 text-center py-3">
+                  Todavía no hay sorteos. ¡La primera víctima está por llegar!
+                </p>
+              )}
+            </div>
+          </details>        </section>}
         {tab === "grupo" && <section>
           <div className="flex items-center justify-between mb-4"><h2 className="text-xl font-black">El comité de víctimas</h2><button onClick={() => setModal("member")} className="bg-lime-300 text-black rounded-xl px-3 py-2 text-sm font-bold flex gap-1 items-center"><Plus size={16} /> Reclutar</button></div>
           <div className="glass rounded-2xl p-4 mb-6"><div className="flex justify-between"><div><p className="text-xs text-zinc-500">Código para reclutar víctimas</p><p className="text-2xl font-black tracking-[.2em] mt-1">{group.id}</p></div><button onClick={copyCode} className="self-center bg-white/10 p-3 rounded-xl"><Copy size={17} /></button></div><p className="text-xs text-zinc-500 mt-3">Pásales el código. Que nadie pueda decir que no estaba avisado.</p></div>

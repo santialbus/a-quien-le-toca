@@ -12,7 +12,8 @@ import {
   serverTimestamp,
   setDoc,
   updateDoc,
-  where
+  where,
+  writeBatch
 } from "firebase/firestore";
 import { db } from "./firebase";
 import type { Draw, Group, Member, Penalty, Task, RouletteState } from "./types";
@@ -99,35 +100,66 @@ export function listenMembers(id: string, cb: (v: Member[]) => void) {
   return onSnapshot(col(id, "members"), s => cb(s.docs.map(d => d.data() as Member)));
 }
 export function listenTasks(id: string, cb: (v: Task[]) => void) {
-  return onSnapshot(query(col(id, "tasks"), orderBy("createdAt", "asc")), s => cb(s.docs.map(d => ({id:d.id,...d.data()} as Task))));
+  return onSnapshot(query(col(id, "tasks"), orderBy("createdAt", "asc")), s => cb(s.docs.map(d => ({ id: d.id, ...d.data() } as Task))));
 }
 export function listenPenalties(id: string, cb: (v: Penalty[]) => void) {
-  return onSnapshot(query(col(id, "penalties"), orderBy("createdAt", "desc")), s => cb(s.docs.map(d => ({id:d.id,...d.data()} as Penalty))));
+  return onSnapshot(query(col(id, "penalties"), orderBy("createdAt", "desc")), s => cb(s.docs.map(d => ({ id: d.id, ...d.data() } as Penalty))));
 }
 export function listenDraws(id: string, cb: (v: Draw[]) => void) {
-  return onSnapshot(query(col(id, "draws"), orderBy("createdAt", "desc")), s => cb(s.docs.map(d => ({id:d.id,...d.data()} as Draw))));
+  return onSnapshot(query(col(id, "draws"), orderBy("createdAt", "desc")), s => cb(s.docs.map(d => ({ id: d.id, ...d.data() } as Draw))));
 }
 export async function addMember(id: string, uid: string, name: string) {
-  await setDoc(doc(database(), "groups", id, "members", uid), {uid, name, joinedAt:serverTimestamp()});
+  await setDoc(doc(database(), "groups", id, "members", uid), { uid, name, joinedAt: serverTimestamp() });
 }
 export async function removeMember(id: string, uid: string) {
   await deleteDoc(doc(database(), "groups", id, "members", uid));
 }
 export async function addTask(id: string, title: string) {
-  await addDoc(col(id, "tasks"), {title, createdAt:serverTimestamp()});
+  await addDoc(col(id, "tasks"), { title, createdAt: serverTimestamp() });
 }
 export async function removeTask(id: string, taskId: string) {
   await deleteDoc(doc(database(), "groups", id, "tasks", taskId));
 }
 export async function addPenalty(id: string, p: Omit<Penalty, "id" | "createdAt">) {
-  await addDoc(col(id, "penalties"), {...p, createdAt:serverTimestamp()});
+  await addDoc(col(id, "penalties"), { ...p, createdAt: serverTimestamp() });
 }
-export async function saveDraw(id: string, d: Omit<Draw, "id" | "createdAt">) {
-  const ref = await addDoc(col(id, "draws"), {
-    ...d,
-    createdAt: serverTimestamp()
+async function keepLatestDraws(groupId: string) {
+  const drawsQuery = query(
+    col(groupId, "draws"),
+    orderBy("createdAt", "desc")
+  );
+
+  const snapshot = await getDocs(drawsQuery);
+
+  const oldDraws = snapshot.docs.slice(10);
+
+  if (oldDraws.length === 0) return;
+
+  const batch = writeBatch(database());
+
+  oldDraws.forEach(draw => {
+    batch.delete(draw.ref);
   });
-  return ref.id;
+
+  await batch.commit();
+}
+export async function saveDraw(
+  id: string,
+  d: Omit<Draw, "id" | "createdAt">
+) {
+  const dbInstance = database();
+  const drawRef = doc(col(id, "draws"));
+
+  await runTransaction(dbInstance, async transaction => {
+    transaction.set(drawRef, {
+      ...d,
+      createdAt: serverTimestamp()
+    });
+  });
+
+  await keepLatestDraws(id);
+
+  return drawRef.id;
 }
 
 export async function updateDrawTask(groupId: string, drawId: string, taskTitle: string) {
@@ -232,7 +264,8 @@ export async function startRoulette(
         }
 
         // Si un sorteo anterior quedó interrumpido,
-        // guardamos igualmente su resultado.
+        // guardamos igualmente su resultado y limpiamos el historial.
+        await keepLatestDraws(groupId);
         transaction.set(
           doc(dbInstance, "groups", groupId, "draws", current.drawId),
           {
@@ -246,7 +279,7 @@ export async function startRoulette(
       }
     }
 
-    transaction.set(rouletteRef, {
+        transaction.set(rouletteRef, {
       status: "spinning",
       spinId: Array.from(
         crypto.getRandomValues(new Uint8Array(16)),
@@ -261,6 +294,9 @@ export async function startRoulette(
       drawId: drawRef.id
     });
   });
+
+  await keepLatestDraws(groupId);
+
 }
 
 export async function finishRoulette(
@@ -271,6 +307,7 @@ export async function finishRoulette(
     groupId,
     spinId
   });
+
   const dbInstance = database();
 
   const rouletteRef = doc(
@@ -280,6 +317,8 @@ export async function finishRoulette(
     "roulette",
     "current"
   );
+
+  let shouldCleanup = false;
 
   await runTransaction(dbInstance, async transaction => {
     const snapshot = await transaction.get(rouletteRef);
@@ -310,5 +349,12 @@ export async function finishRoulette(
       status: "finished",
       finishedAt: serverTimestamp()
     });
+
+    shouldCleanup = true;
   });
+
+  if (shouldCleanup) {
+    await keepLatestDraws(groupId);
+  }
 }
+
