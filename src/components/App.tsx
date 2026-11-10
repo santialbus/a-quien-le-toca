@@ -83,6 +83,32 @@ const DEFAULT_TASKS = [
 type Tab = "ruleta" | "grupo" | "ranking";
 const cx = (...v: (string | false | undefined)[]) => v.filter(Boolean).join(" ");
 
+const WHEEL_COLORS = [
+  "#a3e635", // Lima
+  "#38bdf8", // Azul
+  "#f472b6", // Rosa
+  "#fbbf24", // Amarillo
+  "#a78bfa", // Violeta
+  "#fb7185", // Coral
+  "#2dd4bf", // Turquesa
+  "#fb923c", // Naranja
+  "#818cf8", // Índigo
+  "#bef264", // Verde claro
+  "#e879f9", // Magenta
+  "#facc15", // Dorado
+];
+
+function hashString(value: string) {
+  let hash = 0;
+
+  for (let i = 0; i < value.length; i++) {
+    hash = (hash * 31 + value.charCodeAt(i)) >>> 0;
+  }
+
+  return hash;
+}
+
+
 export default function App() {
   const [uid, setUid] = useState(""); const [authError, setAuthError] = useState("");
   const [groups, setGroups] = useState<Group[]>([]); const [active, setActive] = useState("");
@@ -109,6 +135,21 @@ export default function App() {
   const lastAnimatedSpin = useRef("");
   const lastCelebratedSpin = useRef("");
   const initialFinishedSpin = useRef("");
+  const lastHandledFinishedSpin = useRef("");
+
+
+  const wheelMembers = useMemo(
+    () => [...members].sort((a, b) => a.uid < b.uid ? -1 : a.uid > b.uid ? 1 : 0),
+    [members]
+  );
+
+  const wheelSegments = useMemo(
+    () =>
+      wheelMembers.length >= 2 && wheelMembers.length <= 5
+        ? [...wheelMembers, ...wheelMembers]
+        : wheelMembers,
+    [wheelMembers]
+  );
 
   const [analyticsConsent, setAnalyticsConsent] = useState<
     "accepted" | "rejected" | null
@@ -224,6 +265,23 @@ export default function App() {
 
     if (rouletteState.status === "spinning") {
       setWinnerModalOpen(false);
+
+      const winnerIndexes = wheelSegments
+        .map((member, index) =>
+          member.uid === rouletteState.winnerUid ? index : -1
+        )
+        .filter(index => index !== -1);
+
+      if (winnerIndexes.length === 0) return;
+
+      const winnerIndex =
+        winnerIndexes[
+        hashString(rouletteState.spinId) % winnerIndexes.length
+        ];
+
+      // Esperamos a tener cargados los participantes.
+      if (winnerIndex === -1 || wheelMembers.length === 0) return;
+
       // Evita iniciar dos veces la animación del mismo sorteo.
       if (lastAnimatedSpin.current === rouletteState.spinId) return;
 
@@ -246,15 +304,20 @@ export default function App() {
       setSpinning(true);
       setSpinDuration(Math.max(remaining, 1));
 
-      // Todos los dispositivos utilizan el mismo incremento.
-      const extra =
-        1440 +
-        [...rouletteState.spinId].reduce(
-          (sum, char) => sum + char.charCodeAt(0),
-          0
-        ) % 1080;
+      // Calculamos el centro del sector del ganador.
+      const sliceAngle = 360 / wheelSegments.length;
+      const winnerCenter = (winnerIndex + 0.5) * sliceAngle;
 
-      setRotation(r => r + extra);
+      // Número de vueltas completo y sincronizado entre dispositivos.
+      const fullTurns = 1440 + (hashString(rouletteState.spinId) % 4) * 360;
+
+      setRotation(current => {
+        const currentAngle = ((current % 360) + 360) % 360;
+        const alignment =
+          (360 - ((currentAngle + winnerCenter) % 360)) % 360;
+
+        return current + fullTurns + alignment;
+      });
 
       buzz(25);
 
@@ -281,6 +344,9 @@ export default function App() {
         window.clearTimeout(timeout);
       };
     }
+
+    if (lastHandledFinishedSpin.current === rouletteState.spinId) return;
+    lastHandledFinishedSpin.current = rouletteState.spinId;
 
     // El sorteo ha terminado: todos muestran el mismo resultado.
     setSpinning(false);
@@ -310,7 +376,7 @@ export default function App() {
       fanfare();
       buzz([40, 35, 80]);
     }
-  }, [rouletteState, active]);
+  }, [rouletteState, active, wheelMembers, wheelSegments]);
 
   useEffect(() => {
     const saved = window.localStorage.getItem("analyticsConsent");
@@ -331,6 +397,51 @@ export default function App() {
   const group =
     groups.find(g => g.id === active) ??
     (activeGroupData?.id === active ? activeGroupData : undefined);
+
+
+
+  const wheelColors = useMemo(() => {
+    const used = new Set<number>();
+    const colors = new Map<string, string>();
+
+    wheelMembers.forEach((member, index) => {
+      let colorIndex = hashString(member.uid) % WHEEL_COLORS.length;
+      let attempts = 0;
+
+      while (used.has(colorIndex) && attempts < WHEEL_COLORS.length) {
+        colorIndex = (colorIndex + 1) % WHEEL_COLORS.length;
+        attempts++;
+      }
+
+      const color = attempts < WHEEL_COLORS.length
+        ? WHEEL_COLORS[colorIndex]
+        : `hsl(${(hashString(member.uid) + index * 137.508) % 360} 72% 55%)`;
+
+      used.add(colorIndex);
+      colors.set(member.uid, color);
+    });
+
+    return colors;
+  }, [wheelMembers]);
+
+  const wheelGradient = useMemo(() => {
+    if (wheelSegments.length === 0) {
+      return "conic-gradient(#252c38 0deg 360deg)";
+    }
+
+    const sliceAngle = 360 / wheelSegments.length;
+
+    const stops = wheelSegments.map((member, index) => {
+      const start = index * sliceAngle;
+      const end = (index + 1) * sliceAngle;
+      const color = wheelColors.get(member.uid) ?? "#252c38";
+
+      return `${color} ${start}deg ${end}deg`;
+    });
+
+    return `conic-gradient(${stops.join(", ")})`;
+  }, [wheelSegments, wheelColors]);
+
   const taskList = tasks;
   const sorted = useMemo(() => {
     const now = new Date();
@@ -400,7 +511,8 @@ export default function App() {
   const spin = async () => {
     if (spinning || members.length < 1 || !selectedTask || !group) return;
 
-    const chosen = members[Math.floor(Math.random() * members.length)];
+    const chosen =
+      wheelMembers[Math.floor(Math.random() * wheelMembers.length)];
 
     await run(async () => {
       await startRoulette(active, {
@@ -473,7 +585,7 @@ export default function App() {
 
   if (!firebaseConfigured) return <SetupScreen />;
   if (authError) return <main className="min-h-screen grid place-items-center p-6"><div className="glass rounded-3xl p-6 max-w-md"><AlertCircle className="text-rose-400 mb-3" /><h1 className="text-xl font-bold">No se pudo conectar</h1><p className="text-zinc-400 mt-2 text-sm">{authError}</p><p className="text-zinc-500 text-xs mt-4">Comprueba Firebase Authentication y habilita el proveedor Anónimo.</p></div>
-  
+
   </main>;
   if (!uid) return <main className="min-h-screen grid place-items-center"><LoaderCircle className="animate-spin text-lime-300" /></main>;
 
@@ -520,10 +632,17 @@ export default function App() {
             <div className="absolute top-0 left-1/2 -translate-x-1/2 -translate-y-1/2 w-44 h-44 bg-lime-300/10 blur-3xl rounded-full" />
             <div className="relative mx-auto w-64 h-64 sm:w-72 sm:h-72">
               <div className="absolute z-10 top-0 left-1/2 -translate-x-1/2 -translate-y-1"><div className="w-0 h-0 border-l-[13px] border-r-[13px] border-t-[24px] border-l-transparent border-r-transparent border-t-lime-300 drop-shadow-lg" /></div>
-              <div className={cx("absolute inset-2 rounded-full border-[10px] border-[#292f3c] bg-[conic-gradient(from_0deg,#a3e635_0deg_60deg,#252c38_60deg_120deg,#a3e635_120deg_180deg,#252c38_180deg_240deg,#a3e635_240deg_300deg,#252c38_300deg_360deg)] transition-transform duration-[3400ms] ease-[cubic-bezier(.12,.75,.12,1)] grid place-items-center", spinning && "brightness-125")} style={{
-                transform: `rotate(${rotation}deg)`,
-                transitionDuration: `${spinDuration}ms`,
-              }}>
+              <div
+                className={cx(
+                  "absolute inset-2 rounded-full border-[10px] border-[#292f3c] transition-transform duration-[3400ms] ease-[cubic-bezier(.12,.75,.12,1)] grid place-items-center",
+                  spinning && "brightness-125"
+                )}
+                style={{
+                  background: wheelGradient,
+                  transform: `rotate(${rotation}deg)`,
+                  transitionDuration: `${spinDuration}ms`,
+                }}
+              >
                 <div className="w-24 h-24 rounded-full bg-[#111520] border border-white/10 shadow-2xl grid place-items-center"><span className="text-3xl">🎯</span></div>
               </div>
               <div className="absolute inset-0 rounded-full border border-white/10 pointer-events-none" />
@@ -671,8 +790,39 @@ export default function App() {
             </>
           )}
 
+          {/* Participantes y colores de la ruleta */}
+          <div className="mt-6 rounded-2xl border border-white/10 bg-white/[0.03] px-4 py-3">
+            <div className="flex items-center justify-between mb-3">
+              <span className="text-sm font-bold text-white">
+                En la ruleta
+              </span>
 
-          
+              <span className="text-xs text-white/40">
+                {wheelMembers.length} participantes
+              </span>
+            </div>
+
+            <div className="flex flex-wrap items-center gap-x-5 gap-y-3">
+              {wheelMembers.map(member => (
+                <div
+                  key={member.uid}
+                  className="flex items-center gap-2"
+                >
+                  <span
+                    className="w-2.5 h-2.5 rounded-full shrink-0"
+                    style={{
+                      backgroundColor: wheelColors.get(member.uid) ?? "#ffffff"
+                    }}
+                  />
+
+                  <span className="text-sm font-medium text-white/80">
+                    {member.name}
+                  </span>
+                </div>
+              ))}
+            </div>
+          </div>
+
           <div className="mt-6"><div className="flex justify-between mb-3"><h3 className="font-bold">Últimos sorteos</h3><span className="text-xs text-zinc-500">{draws.length} registros</span></div>{draws.slice(0, 4).map(d => <div key={d.id} className="glass rounded-xl p-3 mb-2 flex justify-between text-sm"><span>{d.winnerName} <span className="text-zinc-500">· {d.taskTitle}</span></span><Check size={16} className="text-lime-300" /></div>)}</div>
         </section>}
         {tab === "grupo" && <section>
@@ -919,7 +1069,7 @@ export default function App() {
       {modal === "fine" && <><label className="text-xs text-zinc-400">¿Quién se ha escaqueado?</label><select value={fineTarget} onChange={e => setFineTarget(e.target.value)} className="w-full mt-2 mb-4 bg-[#111520] border border-white/10 rounded-xl p-3 outline-none"><option value="">Selecciona participante</option>{members.map(m => <option key={m.uid} value={m.uid}>{m.name}</option>)}</select><label className="text-xs text-zinc-400">Tipo de multa</label><div className="grid grid-cols-2 gap-2 mt-2 mb-4"><button onClick={() => setFineType("money")} className={cx("rounded-xl p-3 border text-sm", fineType === "money" ? "border-lime-300 bg-lime-300/10 text-lime-200" : "border-white/10")}>💶 Económica</button><button onClick={() => setFineType("challenge")} className={cx("rounded-xl p-3 border text-sm", fineType === "challenge" ? "border-lime-300 bg-lime-300/10 text-lime-200" : "border-white/10")}>🎯 Reto / castigo</button></div>{fineType === "money" && <Field label="Cantidad (€)" value={fineAmount} set={setFineAmount} placeholder="2" type="number" />}<Field label={fineType === "money" ? "Motivo" : "Describe el reto"} value={fineDescription} set={setFineDescription} placeholder="Invita a un café" /><Action onClick={addFine} disabled={busy}>Registrar multa</Action></>}
     </Modal>}
 
-        {analyticsConsent === null && (
+    {analyticsConsent === null && (
       <div className="fixed bottom-4 inset-x-4 z-[80] max-w-xl mx-auto glass rounded-2xl border border-white/10 p-4 shadow-2xl">
         <p className="font-bold text-sm">¿Nos ayudas a mejorar?</p>
         <p className="text-xs text-zinc-400 mt-2 leading-5">
